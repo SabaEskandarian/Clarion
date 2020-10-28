@@ -108,6 +108,7 @@ func clientConnection(server string, msgBlocks int, pubKeys []*[32]byte) time.Du
     
     msg := make([]byte, 4)//TODO temp, the final thing to be sent goes here
 
+    
                     
     //TODO prepare the message
     
