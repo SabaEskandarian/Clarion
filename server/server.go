@@ -22,13 +22,9 @@ func main() {
     
     serverNum := 0
     addr:="127.0.0.1:4443"
-    
-    //leadServer = "127.0.0.1:4443"
-    //auxServer = "127.0.0.1:4442"
-    //otherServer = "127.0.0.1:4444"
-    
+        
     if len(os.Args) < 5 {
-        log.Println("usage: server [numservers] [msg length in blocks] [shuffle batch size] [servernum] (if not leader, [leaderAddr])")
+        log.Println("usage: server [numservers] [msg length in blocks] [shuffle batch size] [servernum] (if not leader, [leaderAddr:4443])")
         log.Println("set numServers to 2 for the 1 of 3 scheme. parameters must match for all servers")
         log.Println("server 0 is the leader")
         log.Println("server -1 is the aux server, tell that server the Addr of the leader")
