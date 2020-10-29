@@ -120,6 +120,9 @@ func clientConnection(server string, msgBlocks int, pubKeys []*[32]byte) time.Du
     //"box" sent to leader is actually just sent to the leader without a box
     msgToSend := append(keyShareSeeds[0],bodyShares[0]...)
     
+    //log.Printf("Msg length for one share: %d\n", len(msgToSend))
+    //log.Printf("encryption size overhead: %d\n", box.AnonymousOverhead)
+    
     for i:= 1; i < numServers; i++ {
         
         //SealAnonymous appends its output to msgToSend

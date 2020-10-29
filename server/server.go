@@ -3,11 +3,11 @@ package main
 import (
     "log"
     //"crypto/tls"
-    //"net"
+    "net"
     "os"
     //"time"
     //"unsafe"
-    //"io"
+    "io"
     //"crypto/rand"
     //"golang.org/x/crypto/nacl/box"
     //"sync/atomic"
@@ -22,6 +22,8 @@ func main() {
     
     serverNum := 0
     addr:="127.0.0.1:4443"
+    
+    log.SetFlags(log.Lshortfile)
         
     if len(os.Args) < 5 {
         log.Println("usage: server [numservers] [msg length in blocks] [shuffle batch size] [servernum] (if not leader, [leaderAddr:4443])")
@@ -52,14 +54,41 @@ func main() {
         }
     }
     
-    
-    log.SetFlags(log.Lshortfile)
-    
-    //listen for a connection from 
-    
+    //NOTE, I'll require the order the servers go online to be leader, aux, and then the other servers in increasing index order. Otherwise we'll have problems. This'll just make the setup code easier. 
 }
 
-//NOTE, I'll require the order the servers go online to be leader, aux, and then the other servers in increasing index order. Otherwise we'll have problems. This'll just make the setup code easier. 
+//some utility functions used by the servers
 
-//main server will have a bunch of goroutines that will be open with all the other servers for handling client requests
-//when its time to actually process, it will block the other goroutines and do all the important stuff in a main routine
+func readFromConn(conn net.Conn, bytes int) []byte {
+    buffer := make([]byte, bytes)
+    for count := 0; count < bytes; {
+        n, err := conn.Read(buffer[count:])
+        count += n
+        if err != nil && err != io.EOF && count != bytes {
+            log.Println(n, err)
+        }
+    }
+    return buffer
+}
+
+func writeToConn(conn net.Conn, msg []byte) {
+    n, err := conn.Write(msg)
+    if err != nil {
+        log.Println(n, err)
+    }
+}
+
+func intToByte(myInt int) (retBytes []byte){
+    retBytes = make([]byte, 4)
+    retBytes[3] = byte((myInt >> 24) & 0xff)
+    retBytes[2] = byte((myInt >> 16) & 0xff)
+    retBytes[1] = byte((myInt >> 8) & 0xff)
+    retBytes[0] = byte(myInt & 0xff)
+    return
+}
+
+func byteToInt(myBytes []byte) (x int) {
+    x = int(myBytes[3]) << 24 + int(myBytes[2]) << 16 + int(myBytes[1]) << 8 + int(myBytes[0])
+    return
+}
+

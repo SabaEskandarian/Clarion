@@ -139,6 +139,13 @@ func AesPRG(msgLen int, seed []byte) []byte {
     return ct
 }
 
+//expand a key seed share to a vector of zeros with the seed in the correct place
+func ExpandKeyShares(myServerNum, numServers int, keySeedShare []byte) []byte {
+    expansion := make([]byte, 16*numServers)
+    copy(expansion[16*myServerNum:16*(myServerNum+1)], keySeedShare)
+    return expansion
+}
+
 //splits a message into additive shares mod a prime
 func Share(numShares int, msg []byte) [][]byte {
     shares := make([][]byte, numShares)
@@ -182,6 +189,30 @@ func Share(numShares int, msg []byte) [][]byte {
     }
     
     return shares
+}
+
+//generate a permutation of the numbers [0, n)
+//NOTE: can this be made faster?
+//e.g., by statically allocating a bit perm instead of making a new slice each time?
+func GenPerm(n int) []int {
+    perm := make([]int, n)
+    var randNum [4]byte
+    
+    for i:=1; i < n; i++ {
+        _,err := rand.Read(randNum[:])
+        if err != nil {
+            panic("randomness issue")
+        }
+        j := byteToInt(randNum[:]) % (i+1)
+        perm[i] = perm[j]
+        perm[j] = i
+    }
+    return perm
+}
+
+func byteToInt(myBytes []byte) (x int) {
+    x = int(myBytes[3]) << 24 + int(myBytes[2]) << 16 + int(myBytes[1]) << 8 + int(myBytes[0])
+    return
 }
 
 //generate beaver triples
