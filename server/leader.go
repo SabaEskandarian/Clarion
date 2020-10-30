@@ -44,9 +44,11 @@ func leader(numServers, msgBlocks, batchSize int) {
     auxConn.SetDeadline(time.Time{})
         
     //holds connections to the other shuffle servers
-    conns := make([]net.Conn, (numServers-1))
+    conns := make([]net.Conn, (numServers))
 
-    for i := 0; i < numServers - 1; i++ {
+    //we'll just leave the zeroth entry empty
+    // so conns[i] is the connection to server i
+    for i := 1; i < numServers; i++ {
         conns[i], err = ln.Accept()
         if err != nil {
             log.Println(err)
@@ -62,6 +64,11 @@ func leader(numServers, msgBlocks, batchSize int) {
     clientTransmissionLength := (numServers - 1) * boxedShareLength + shareLength
     //server share is longer because there needs to be space for a share of _each_ mac key share
     serverShareLength := 16*msgBlocks + 32 + numServers * 16
+    blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
+    numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    dbSize := blocksPerRow*batchSize*16
+    //bigbox has nonce, beavers, perm, delta, abs, and box encryption overhead
+    bigBoxSize := 24 + numBeavers*48 + 4*batchSize + dbSize + 2*(numServers-1)*dbSize + box.Overhead
     
     //data structure for holding batch of messages
     //each entry will be of length serverShareLength
@@ -70,9 +77,9 @@ func leader(numServers, msgBlocks, batchSize int) {
         db[i] = make([]byte, serverShareLength)
     }
 
-    //set up running average for timing TODO uncomment when used
-    //batchesCompleted := 0
-    //var totalTime time.Duration
+    //set up running average for timing
+    batchesCompleted := 0
+    var totalTime, totalBlindMacTime, totalShuffleTime, totalRevealTime time.Duration
     
     //main server behavior below
     for {
@@ -108,7 +115,7 @@ func leader(numServers, msgBlocks, batchSize int) {
             copy(db[prelimPerm[msgCount]][16*numServers:], clientTransmission[16:shareLength])
             
             //pass on the boxes to the other servers, send the index they should be placed in too
-            for i := 0; i < numServers-1; i++ {
+            for i := 1; i < numServers; i++ {
                 
                 //send prelimPerm[msgCount]
                 writeToConn(conns[i], intToByte(prelimPerm[msgCount]))
@@ -125,14 +132,143 @@ func leader(numServers, msgBlocks, batchSize int) {
         //this would speed up the processing time, esp. if the server were multithreaded
         //but I'm handling everything for a batch at once so I can report performance for processing a batch
         
-        //TODO: ping aux server, get beaver triples and translations from aux server, pass on boxes     
+        startTime := time.Now()
         
-        //TODO: if numServers > 2, timing starts here. If numServers == 2, timing starts with processing phase
+        //ping aux server
+        emptyByte := make([]byte, 4)
+        writeToConn(auxConn, emptyByte)
         
-        //TODO: blind MAC verification, 
+        //read beaver triples and share translation stuff
+        beavers := readFromConn(auxConn, numBeavers*48)
+        piBytes := readFromConn(auxConn, batchSize*4)
+        pi := make([]int, 0)
+        for i:=0; i < batchSize; i++ {
+            pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
+        }
+        delta := readFromConn(auxConn, dbSize)
+        abs := make([][]byte, numServers)
+        for i:=1; i < numServers; i++ {
+            abs[i] = readFromConn(auxConn, 2*dbSize)
+        }
+        
+        //read boxes for other servers and pass them on
+        for i:=1; i < numServers; i++ {
+            go func(auxConn, conn net.Conn, bigBoxSize int) {
+                box := readFromConn(auxConn, bigBoxSize)
+                writeToConn(conn, box)
+            }(auxConn, conns[i], bigBoxSize)
+        }
+        
+        //if numServers > 2, timing starts here. If numServers == 2, timing starts with processing phase
+        if numServers > 2 {
+            startTime = time.Now()
+
+            //NOTE: time might appear worse than it really is since I'm not waiting on finishing sending the preprocessing info before starting this stage, but I don't think it matters too much. I can change that if it does
+        }
+                
+        blindMacStartTime := time.Now()
+        
+        //TODO: blind MAC verification,
+        
+        //prep vector of all messages and keys masked with appropriate beaver values
+        //(first expand key shares)
+        
+        //receive shares from everyone, merge and broadcast to everyone
+        
+        //locally compute product shares and share of mac, subtract from share of given tag
+        
+        //receive MAC shares from everyone and verify everything sums to 0
+        
+        
+        blindMacElapsedTime := time.Since(blindMacStartTime)
+        shuffleStartTime := time.Now()
         
         //TODO: shuffle
         
-        //TODO commit, reveal, mac verify, decrypt
+        shuffleElapsedTime := time.Since(shuffleStartTime)
+        revealTimeStart := time.Now()
+        
+        //commit, reveal, mac verify, decrypt
+        
+        //hash the whole db
+        flatDB, hash := mycrypto.FlattenAndHash(db)
+        //receive the hashed DBs from everyone and forward them to everyone
+        hashes := receiveAndSend(hash, conns, -1)
+        //receive the real DB from everyone and forward them to everyone
+        flatDBs := receiveAndSend(flatDB, conns, -1)
+        //merge DBs
+        mergedDB := mergeFlattenedDBs(flatDBs, numServers, len(flatDB))
+        //check macs in merged DBs
+        //TODO helper function in server to take mergedDB and check all the MACs, return bool
+        //decrypt messages
+        //TODO helper function in server to decrypt each ciphertext and return an output DB
+        
+        revealElapsedTime := time.Since(revealTimeStart)
+        
+        elapsedTime := time.Since(startTime)
+        batchesCompleted++
+        totalTime += elapsedTime
+        totalBlindMacTime += blindMacElapsedTime
+        totalShuffleTime += shuffleElapsedTime
+        totalRevealTime += revealElapsedTime
+        log.Printf("%d servers, %d msgs per batch, %d byte messages\n", numServers, batchSize, msgBlocks*16)
+        log.Printf("blind mac time: %d, average: %d", blindMacElapsedTime, totalBlindMacTime/time.Duration(batchesCompleted))
+        log.Printf("shuffle time: %d, average: %d", shuffleElapsedTime, totalShuffleTime/time.Duration(batchesCompleted))
+        log.Printf("reveal time: %d, average: %d", revealElapsedTime, totalRevealTime/time.Duration(batchesCompleted))
+        log.Printf("batches completed: %d\n", batchesCompleted)
+        log.Printf("Time for this batch: %s\n", elapsedTime)
+        log.Printf("Average time per batch: %s\n\n\n", totalTime/time.Duration(batchesCompleted))
     }
+}
+
+
+//receive something from everyone and then broadcast everything to:
+//everyone if recipient = -1
+//nobody if recipient = 0
+//a particular person if recipient = i > 0
+//returns the broadcasted value for the lead server to use
+func receiveAndSend(myContribution []byte, conns []net.Conn, recipient int) []byte {
+    blocker := make(chan int)
+    numServers := len(conns) + 1
+    contentLenPerServer := len(myContribution)
+    content := make([]byte, contentLenPerServer*numServers)
+    
+    copy(content[:contentLenPerServer], myContribution[:])
+    
+    if recipient < -1 || recipient >= len(conns) {
+        panic("incorrect recipient")
+    }
+    
+    //receive from everyone
+    for i := 1; i < numServers; i++ {
+        go func(outputLocation []byte, conn net.Conn, bytesToRead int) {
+            copy(outputLocation, readFromConn(conn, bytesToRead))
+            blocker <- 1
+            return
+        }(content[i*contentLenPerServer:(i+1)*contentLenPerServer], conns[i], contentLenPerServer)
+    }
+    
+    for i := 1; i < numServers; i++ {
+        <- blocker
+    }
+    
+    if recipient == -1 {
+        //broadcast
+        for i := 1; i < numServers; i++ {
+            go func(data []byte, conn net.Conn) {
+                writeToConn(conn, data)
+                blocker <- 1
+                return
+            }(content, conns[i])
+        }
+        
+        for i := 1; i < numServers; i++ {
+            <- blocker
+        }
+    } else if recipient > 0 {
+        //send just to recipient
+        writeToConn(conns[recipient], content)
+    }
+    
+    return content
 }

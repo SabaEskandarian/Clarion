@@ -5,6 +5,7 @@ import (
     "crypto/rand"
     "crypto/aes"
     "crypto/cipher"
+    "crypto/sha256"
     //"golang.org/x/crypto/nacl/box"
     //"strings"
     "bytes"
@@ -50,7 +51,7 @@ func MakeCT(numBlocks int) []byte {
     return ct
 }
 
-//decrypt ct where first 16 bytes are the AES key, zero IV
+//decrypt ct where first 16 bytes are the AES key. use zero IV
 func DecryptCT(ct []byte) []byte{
     
     plaintext := make([]byte, len(ct) - 16)
@@ -191,6 +192,46 @@ func Share(numShares int, msg []byte) [][]byte {
     return shares
 }
 
+//combine additive shares to recover message
+func Merge(shares [][]byte) []byte{
+
+    numShares := len(shares)
+    numBlocks := len(shares[0])/16
+    if len(shares[0]) % 16 != 0 {
+        panic("messages being merged have length not a multiple of 16")
+    }
+    
+    var elements []*modp.Element
+
+    //make array of elements that holds the first share
+    for j:=0; j < numBlocks; j++ {
+        var temp modp.Element
+        elements = append(elements, temp.SetBytes(shares[0][16*j:16*(j+1)]))
+    }
+    
+    //add in the corresponding elements from subsequent shares
+    for i:=1; i < numShares; i++ {
+        if len(shares[i]) != len(shares[0]) {
+            panic("messages being merged have different lengths")
+        }
+        
+        var temp modp.Element
+        
+        for j:=0; j < numBlocks; j++ {
+            temp.SetBytes(shares[i][16*j:16*(j+1)])
+            elements[j].Add(elements[j], &temp)
+        }
+    }
+    
+    //convert the whole thing to []byte
+    output := make([]byte, 0)
+    for j:=0; j < numBlocks; j++ {
+        output = append(output, elements[j].Bytes()...)
+    }
+    
+    return output
+}
+
 //generate a permutation of the numbers [0, n)
 //NOTE: can this be made faster?
 //e.g., by statically allocating a bit perm instead of making a new slice each time?
@@ -215,11 +256,118 @@ func byteToInt(myBytes []byte) (x int) {
     return
 }
 
-//generate beaver triples
-//outputs are slices for values of a, b, c for each server
-//func GenBeavers(numBeavers, numServers int) ([][]byte, [][]byte, [][]byte) {
-    //TODO
-//}
+func intToByte(myInt int) (retBytes []byte){
+    retBytes = make([]byte, 4)
+    retBytes[3] = byte((myInt >> 24) & 0xff)
+    retBytes[2] = byte((myInt >> 16) & 0xff)
+    retBytes[1] = byte((myInt >> 8) & 0xff)
+    retBytes[0] = byte(myInt & 0xff)
+    return
+}
 
-//TODO generate permutations and share translations
-//func GenShareTrans(vecLen, numServers int)
+//generate beaver triples
+//outputs are [][]byte slices for each server that contain [a]||[b]||[c] (in beaverDB)
+func GenBeavers(numBeavers, numServers int) [][]byte {
+    
+    triples := make([]byte, numBeavers*48)
+    var eltA, eltB, eltC modp.Element
+    
+    //generate triples a,b,c s.t. a*b=c
+    for i:= 0; i < numBeavers; i++ {
+        
+        //generate random A, B, multiply to get C
+        start:= i*48
+        
+        _,err := rand.Read(triples[start:start+32])
+        if err != nil {
+            panic("randomness issue in beaver triple generation")
+        }
+
+        eltA.SetBytes(triples[start:start+16])
+        eltB.SetBytes(triples[start+16:start+32])
+        eltC.Mul(&eltA, &eltB)
+        copy(triples[start+32:start+48], eltC.Bytes())
+    }
+    
+    //NOTE: could probably speed this up a little by skipping a bunch of []byte->Element->[]byte conversions and just doing the secret sharing on the Elements directly
+    
+    //share the beaver triples
+    return Share(numServers, triples)
+}
+
+//generate permutations and share translations
+//returns a permutation for each server (first return value)
+//as well as a Delta for each permutation (second return value)
+//and a,b for each server for each permutation (third return value)
+func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte, [][][]byte) {
+    
+    //perms is made of bytes so it can be transmitted easily
+    perms := make([][]byte, numServers)
+    abs := make([][][]byte, numServers)
+    deltas := make([][]byte, numServers)
+        
+    var pia,b,d modp.Element
+    
+    //length of a,b,d
+    length := batchSize*blocksPerRow*16
+    
+    for i := 0; i < numServers; i++ {
+        
+        //generate permutation
+        perm := GenPerm(batchSize)
+                
+        //make the byte version of perm too
+        perms[i] = make([]byte, 0)
+        for j := 0; j < batchSize; j++ {
+            perms[i] = append(perms[i], intToByte(perm[j])...)
+        }
+        
+        //generate a, b
+        abs[i] = make([][]byte, numServers)
+        for j := 0; j < numServers; j++ {
+            abs[i][j] = make([]byte, 2*length)
+            
+            //when server i is permuting, all servers j != i get a,b
+            if i != j {
+                _,err := rand.Read(abs[i][j])
+                if err != nil {
+                    panic("randomness issue in share translation generation")
+                }
+            }            
+        }
+        
+        //generate delta
+        deltas[i] = make([]byte, length)
+        //for every block of data in the db
+        for j := 0; j < batchSize; j++ {
+            for c:= 0; c < blocksPerRow; c++ {
+                //for each server's share
+                for k := 0; k < numServers; k++ {
+                    if k != i {
+                        //set d = \pi(a)-b
+                        currBlockNum := j*blocksPerRow+c
+                        permutedBlockNum := perm[j]*blocksPerRow+c
+                        pia.SetBytes(abs[i][k][permutedBlockNum*16:(permutedBlockNum+1)*16])
+                        b.SetBytes(abs[i][k][length+(currBlockNum)*16:length+(currBlockNum+1)*16])
+                        copy(deltas[i][currBlockNum*16:(currBlockNum+1)*16], d.Sub(&pia, &b).Bytes())
+                    }
+                }
+            }
+        }
+    }
+    
+    return perms, deltas, abs
+}
+
+//flatten and compute a hash of the db
+func FlattenAndHash(db [][]byte) ([]byte, []byte) {
+    
+    flatDB := make([]byte, 0)
+    
+    for i:= 0; i < len(db); i++ {
+        flatDB = append(flatDB, db[i]...)
+    }
+    
+    hash := sha256.Sum256(flatDB)
+    return flatDB, hash[:]
+}
