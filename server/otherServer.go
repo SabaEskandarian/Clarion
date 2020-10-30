@@ -10,6 +10,7 @@ import (
     //"io"
     //"crypto/rand"
     "golang.org/x/crypto/nacl/box"
+    "golang.org/x/crypto/nacl/sign"
     //"sync/atomic"
     "strings"
     "strconv"
@@ -25,10 +26,12 @@ func server(numServers, msgBlocks, batchSize, myNum int, leaderAddr string) {
     //in reality the public keys of the servers/auditors should be known 
     //ahead of time and those would be used
     pubKeys := make([]*[32]byte, numServers)
+    verKeys := make([]*[32]byte, numServers)
     
     var err error
     var mySecKey *[32]byte
     var auxSharedKey [32]byte
+    var mySignKey *[64]byte
 
     auxPubKey, _, err := box.GenerateKey(strings.NewReader(strings.Repeat("a", 10000)))
     if err != nil {
@@ -44,14 +47,25 @@ func server(numServers, msgBlocks, batchSize, myNum int, leaderAddr string) {
                 log.Println(err)
                 return
             }
+            
+            verKeys[i], mySignKey, err = sign.GenerateKey(strings.NewReader(strings.Repeat(strconv.Itoa(i),10000)))
+            if err != nil {
+                log.Println(err)
+                return
+            }
         } else {
             pubKeys[i], _, err = box.GenerateKey(strings.NewReader(strings.Repeat(strconv.Itoa(i),10000)))
             if err != nil {
                 log.Println(err)
                 return
             }
+            
+            verKeys[i], _, err = sign.GenerateKey(strings.NewReader(strings.Repeat(strconv.Itoa(i),10000)))
+            if err != nil {
+                log.Println(err)
+                return
+            }
         }
-
     }
     
     box.Precompute(&auxSharedKey, auxPubKey, mySecKey)
@@ -144,7 +158,46 @@ func server(numServers, msgBlocks, batchSize, myNum int, leaderAddr string) {
         
         //TODO: shuffle
         
-        //TODO commit, reveal, mac verify, decrypt
+        //commit, reveal, mac verify, decrypt
+        
+        //hash the whole DB
+        flatDB, hash := mycrypto.FlattenAndHash(db)
+        signedHash := sign.Sign(nil, hash, mySignKey)
+        
+        //send signed hashed DB to leader
+        writeToConn(conn, signedHash)
+        //receive all signedhashed DBs from leader
+        signedHashes := readFromConn(conn, numServers*(32+sign.Overhead))
+        
+        //check all the signatures on hashes
+        hashes := make([]byte, 0)
+        objectSize := 32 + sign.Overhead
+        for i:=0; i < numServers; i++ {
+            hash,ok := sign.Open(nil, signedHashes[i*objectSize:(i+1)*objectSize], verKeys[i])
+            if !ok {
+                panic("signature didn't verify")
+            }
+            hashes = append(hashes, hash...)
+        }
+        
+        //send real DB to leader
+        writeToConn(conn, flatDB)
+        //receive all the real DBs from leader
+        flatDBs := readFromConn(conn, numServers*dbSize)
+        //check that the received DBs match the received hashes
+        if !mycrypto.CheckHashes(hashes, flatDBs, dbSize) {
+            panic("hashes did not match")
+        }
+        //merge DBs
+        mergedDB := mergeFlattenedDBs(flatDBs, numServers, len(flatDB))
+        //check macs in merged DBs and decrypt
+        outputDB, ok := checkMacsAndDecrypt(mergedDB, numServers, msgBlocks, batchSize)
+        if !ok {
+            panic("macs did not verify")
+        }
+        
+        _, _, _ = beavers, delta, outputDB
+        
         //TODO do this one first after finishing the leader
         //then test the whole thing by making them all print the output DBs they got
         //make sure they're all the same and all have the messages intact

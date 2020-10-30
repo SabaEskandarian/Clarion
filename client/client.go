@@ -70,8 +70,13 @@ func main() {
             var totalTime time.Duration
             
             for i := 0; i < numMsgs; i++ {
+                
+                msgType :=0
+                if i < 26 {
+                    msgType += i
+                }
             
-                elapsedTime := clientConnection(server, msgBlocks, pubKeys);
+                elapsedTime := clientConnection(server, msgType, msgBlocks, pubKeys);
 
                 totalTime += elapsedTime
             }
@@ -92,7 +97,7 @@ func main() {
 }
 
 
-func clientConnection(server string, msgBlocks int, pubKeys []*[32]byte) time.Duration {
+func clientConnection(server string, msgType, msgBlocks int, pubKeys []*[32]byte) time.Duration {
     
      conf := &tls.Config{
          InsecureSkipVerify: true,
@@ -112,7 +117,7 @@ func clientConnection(server string, msgBlocks int, pubKeys []*[32]byte) time.Du
         
     //generate the MACed ciphertext, MAC, and all the keys; secret share
     //look in vendors/mycrypto/crypto.go for details
-    keyAndCt := mycrypto.MakeCT(msgBlocks)
+    keyAndCt := mycrypto.MakeCT(msgBlocks, msgType)
     mac, keyShareSeeds := mycrypto.WeirdMac(numServers, keyAndCt)
     bodyShares := mycrypto.Share(numServers, append(mac, keyAndCt...))
         
@@ -126,11 +131,12 @@ func clientConnection(server string, msgBlocks int, pubKeys []*[32]byte) time.Du
     for i:= 1; i < numServers; i++ {
         
         //SealAnonymous appends its output to msgToSend
-        _, err = box.SealAnonymous(msgToSend, append(keyShareSeeds[i],bodyShares[i]...), pubKeys[i], rand.Reader)
+        boxedMessage, err := box.SealAnonymous(nil, append(keyShareSeeds[i],bodyShares[i]...), pubKeys[i], rand.Reader)
         if err != nil {
             log.Println(err)
             return 0
         }
+        msgToSend = append(msgToSend, boxedMessage...)
     }
     
     

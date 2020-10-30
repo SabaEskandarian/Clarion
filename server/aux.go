@@ -5,7 +5,7 @@ import (
     "crypto/tls"
     //"net"
     //"os"
-    //"time"
+    "time"
     //"unsafe"
     //"io"
     "crypto/rand"
@@ -63,10 +63,15 @@ func aux (numServers, msgBlocks, batchSize int, leaderAddr string) {
         
     numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
     
+    totalBatches := 0
+    var totalTime time.Duration
+    
     for {
         //leader requests triples and translations
         readFromConn(conn, 4)
             
+        startTime := time.Now()
+        
         //generate the preprocessed information for all the parties
 
         beavers := mycrypto.GenBeavers(numBeavers, numServers)
@@ -106,5 +111,11 @@ func aux (numServers, msgBlocks, batchSize int, leaderAddr string) {
             //send nonce and box to the leader
             writeToConn(conn, append(nonce[:], box...))
         }
+        
+        elapsedTime := time.Since(startTime)
+        totalTime += elapsedTime
+        totalBatches++
+        log.Printf("preprocessing data prepared in %s\n", elapsedTime)
+        log.Printf("%d batches prepared so far, average time %s\n\n", totalBatches, totalTime/time.Duration(totalBatches))
     }
 }

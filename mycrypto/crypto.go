@@ -13,8 +13,8 @@ import (
     "shufflemessage/modp"
 )
 
-//Generates a ciphertext under a random key and returns the ct with key appended
-func MakeCT(numBlocks int) []byte {
+//Generates a ciphertext under a random key and returns the ct with key prepended
+func MakeCT(numBlocks, msgType int) []byte {
     
     blockSize := 16
     dataLen := numBlocks * blockSize
@@ -22,7 +22,7 @@ func MakeCT(numBlocks int) []byte {
     //make up a message to encrypt, set empty iv
     m := make([]byte, dataLen)
     for i := 0; i < dataLen; i++ {
-        m[i] = 'a'
+        m[i] = byte(97 + msgType) //ascii 'a' is 97
     }
     zeroIV := make([]byte, blockSize)
     
@@ -34,6 +34,7 @@ func MakeCT(numBlocks int) []byte {
         log.Println("couldn't generate key")
         panic(err)
     }
+    //log.Println(key)
     
     //use the key to encrypt the message
     c, err := aes.NewCipher(key)
@@ -46,7 +47,7 @@ func MakeCT(numBlocks int) []byte {
     ctr.XORKeyStream(ct, m)
     //ct now holds the encrypted message
     
-    ct = append(ct, key...)
+    ct = append(key, ct...)
     
     return ct
 }
@@ -57,9 +58,11 @@ func DecryptCT(ct []byte) []byte{
     plaintext := make([]byte, len(ct) - 16)
     zeroIV := make([]byte, 16)
     
+    //log.Println(ct[:16])
+    
     c, err := aes.NewCipher(ct[:16])
     if err != nil {
-        log.Println("Couldn't inititate new cipher")
+        log.Println("Couldn't initiate new cipher")
         panic(err)
     }
     ctr := cipher.NewCTR(c, zeroIV)
@@ -70,9 +73,7 @@ func DecryptCT(ct []byte) []byte{
 
 //outputs a mac on the msg and a key share seed for each server
 func WeirdMac(numServers int, msg []byte) ([]byte, [][]byte) {
-    
-    msgLen := len(msg)
-    
+        
     //generate key shares
     keyShareSeeds := make([][]byte, numServers)
     for i := 0; i < numServers; i++ {
@@ -84,22 +85,23 @@ func WeirdMac(numServers int, msg []byte) ([]byte, [][]byte) {
         }
     }
     
+    return ComputeMac(msg, keyShareSeeds), keyShareSeeds
+}
+
+//compute MAC in the clear
+func ComputeMac(msg []byte, keyShareSeeds [][]byte) []byte {
+    
+    numServers := len(keyShareSeeds)
+    msgLen := len(msg)
+    msgBlocks := msgLen / 16
+    if len(msg) % 16 != 0 {
+        panic("msgLen isn't a multiple of block size. Something has gone wrong :(")
+    }
+    
     //expand seeds to actual key shares using AES in CTR mode as PRG
     keyShares := make([][]byte, numServers)
     for i:= 0; i < numServers; i++ {
         keyShares[i] = AesPRG(msgLen, keyShareSeeds[i])
-    }
-    
-    return ComputeMac(msg, keyShares), keyShareSeeds
-}
-
-//compute MAC in the clear
-func ComputeMac(msg []byte, keyShares [][]byte) []byte {
-    
-    numServers := len(keyShares)
-    msgBlocks := len(msg) / 16
-    if len(msg) % 16 != 0 {
-        panic("msgLen isn't a multiple of block size. Something has gone wrong :(")
     }
     
     var mac, keyPiece, msgPiece, product modp.Element
@@ -117,8 +119,8 @@ func ComputeMac(msg []byte, keyShares [][]byte) []byte {
 }
 
 //check mac in the clear
-func CheckMac(msg, tag []byte, keyShares [][]byte) bool {
-    return bytes.Equal(ComputeMac(msg, keyShares), tag)
+func CheckMac(msg, tag []byte, keyShareSeeds [][]byte) bool {
+    return bytes.Equal(ComputeMac(msg, keyShareSeeds), tag)
 }
 
 //expand a seed using aes in CTR mode
@@ -370,4 +372,16 @@ func FlattenAndHash(db [][]byte) ([]byte, []byte) {
     
     hash := sha256.Sum256(flatDB)
     return flatDB, hash[:]
+}
+
+//NOTE: could use a goroutine to check hashes in parallel
+//check hashes of many flat DBs
+func CheckHashes(hashes, dbs []byte, dbLen int) bool {
+    for i:=0; i < len(hashes)/32; i++ {
+        hash := sha256.Sum256(dbs[dbLen*i:dbLen*(i+1)])
+        if !bytes.Equal(hashes[32*i:32*(i+1)], hash[:]) {
+            return false
+        }
+    }
+    return true
 }
