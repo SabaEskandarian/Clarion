@@ -297,6 +297,29 @@ func GenBeavers(numBeavers, numServers int) [][]byte {
     return Share(numServers, triples)
 }
 
+func TestGenBeavers() bool {
+    numBeavers := 3
+    numServers := 2
+    
+    beavers := Merge(GenBeavers(numBeavers, numServers))
+    
+    var a, b, c, prod modp.Element
+    for i:=0; i < numBeavers; i++ {
+        startBeaver := i*48
+        a.SetBytes(beavers[startBeaver:startBeaver+16])
+        b.SetBytes(beavers[startBeaver+16:startBeaver+32])
+        c.SetBytes(beavers[startBeaver+32:startBeaver+48])
+        prod.Mul(&a, &b)
+        prod.Sub(&prod,&c)
+        if !prod.IsZero() {
+            log.Println(i)
+            return false
+        }
+    }
+    
+    return true
+}
+
 //generate permutations and share translations
 //returns a permutation for each server (first return value)
 //as well as a Delta for each permutation (second return value)
@@ -385,3 +408,110 @@ func CheckHashes(hashes, dbs []byte, dbLen int) bool {
     }
     return true
 }
+
+//check that shares sum to zero
+func CheckSharesAreZero(batchSize, numServers int, shares []byte) bool {
+    var hopefullyZero, anotherShare modp.Element
+    for i:=0; i < batchSize; i++ {
+        hopefullyZero.SetBytes(shares[16*i:16*(i+1)])
+        for j:=1; j < numServers; j++ {
+            index := j*16*batchSize + 16*i
+            anotherShare.SetBytes(shares[index:index+16])
+            hopefullyZero.Add(&anotherShare, &hopefullyZero)
+        }
+        if !hopefullyZero.IsZero() {
+            log.Println(i)
+            return false;
+        }
+    }
+    return true;
+}
+
+func TestCheckSharesAreZero() bool {
+    batchSize := 5
+    numServers := 2
+    
+    zeroVals := make([]byte, 16*batchSize)
+    
+    shares := Share(numServers, zeroVals)
+
+    flatShares := make([]byte, 0)
+    for i:=0; i < len(shares); i++ {
+        flatShares = append(flatShares, shares[i]...)
+    }
+    
+    return CheckSharesAreZero(batchSize, numServers, flatShares)
+}
+
+func BeaverProduct(msgBlocks, numServers, batchSize int, beavers, mergedMaskedShares []byte, myExpandedKeyShares, db [][]byte, leader bool) []byte {
+    //locally compute product shares and share of mac, subtract from share of given tag
+    macDiffShares := make([]byte, 0)
+    var maskedKey, myKeyShare, maskedMsg, myMsgShare, givenTag, temp modp.Element
+    for i:=0; i < batchSize; i++ {
+        var runningSum, beaverProductShare modp.Element
+        for j:=0; j < msgBlocks+1; j++ {
+            //do a beaver multiplication here
+            myKeyShare.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
+            myMsgIndex := numServers*16 + 16 + 16*j
+            myMsgShare.SetBytes(db[i][myMsgIndex:myMsgIndex+16])
+            keyIndex := i*16*(msgBlocks+1) + 16*j
+            msgIndex := len(mergedMaskedShares)/2 + keyIndex
+            maskedKey.SetBytes(mergedMaskedShares[keyIndex:keyIndex+16])
+            maskedMsg.SetBytes(mergedMaskedShares[msgIndex:msgIndex+16])
+             
+            if leader {
+                beaverProductShare.Mul(&maskedKey, &maskedMsg)
+            } else {
+                beaverProductShare.SetZero()
+            }
+            maskedKey.Mul(&maskedKey, &myMsgShare) //this now holds a product, not a masked key
+            maskedMsg.Mul(&maskedMsg, &myKeyShare) //this now holds a product, not a masked msg
+            beaverProductShare.Sub(&maskedKey, &beaverProductShare)
+            beaverProductShare.Add(&beaverProductShare, &maskedMsg)
+            beaverIndex := 48*(msgBlocks+1)*i + 48*j + 32
+            temp.SetBytes(beavers[beaverIndex:beaverIndex+16])
+            beaverProductShare.Add(&beaverProductShare, &temp)
+            
+            runningSum.Add(&runningSum, &beaverProductShare)
+        }
+        givenTag.SetBytes(db[i][numServers*16:numServers*16 + 16])
+        runningSum.Sub(&runningSum, &givenTag)
+        macDiffShares = append(macDiffShares, runningSum.Bytes()...)
+    }
+    return macDiffShares
+}
+
+//get all the masked stuff together for the blind mac verification
+func GetMaskedStuff(batchSize, msgBlocks, numServers, myNum int, beavers []byte, db [][]byte) ([]byte, [][]byte) {
+    maskedExpandedKeyShares := make([]byte, 0)
+    maskedMsgShares := make([]byte, 0)
+    var value, mask modp.Element
+    
+    myExpandedKeyShares := make([][]byte, batchSize)
+    
+    for i:=0; i < batchSize; i++ {
+        myExpandedKeyShares[i] = AesPRG((msgBlocks+1)*16, db[i][myNum*16:(myNum+1)*16])
+        for j:=0; j < msgBlocks+1; j++ {
+            //mask the key component
+            value.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
+            beaverIndex := 48*(msgBlocks+1)*i + 48*j
+            mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
+            value.Sub(&value, &mask)
+            maskedExpandedKeyShares = append(maskedExpandedKeyShares, value.Bytes()...)
+            
+            //mask the message component
+            msgIndex := numServers*16 + 16 + 16*j
+            beaverIndex += 16
+            value.SetBytes(db[i][msgIndex:msgIndex+16])
+            mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
+            value.Sub(&value,&mask)
+            maskedMsgShares = append(maskedMsgShares, value.Bytes()...)
+        }
+    }
+    
+    maskedStuff := append(maskedExpandedKeyShares, maskedMsgShares...)
+    return maskedStuff, myExpandedKeyShares
+}
+
+
+
