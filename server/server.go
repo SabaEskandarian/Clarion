@@ -2,136 +2,319 @@ package main
 
 import (
     "log"
-    //"crypto/tls"
+    "crypto/tls"
     "net"
     "os"
-    //"time"
+    "time"
     //"unsafe"
-    "io"
     //"crypto/rand"
-    //"golang.org/x/crypto/nacl/box"
+    "golang.org/x/crypto/nacl/box"
     //"sync/atomic"
     "strconv"
+    "bufio"
+    "strings"
     
     "shufflemessage/mycrypto" 
 )
 
 func main() {
     
-    numServers := 2
-    msgBlocks := 5
-    batchSize := 1000
-    
+    numServers := 0
+    msgBlocks := 0
+    batchSize := 0    
     serverNum := 0
-    addr:="127.0.0.1:4443"
+    paramFile := ""
     
     log.SetFlags(log.Lshortfile)
         
-    if len(os.Args) < 5 {
-        log.Println("usage: server [numservers] [msg length in blocks] [shuffle batch size] [servernum] (if not leader, [leaderAddr:4443])")
-        log.Println("set numServers to 2 for the 1 of 3 scheme. parameters must match for all servers")
-        log.Println("server 0 is the leader")
-        log.Println("server -1 is the aux server, tell that server the Addr of the leader")
-        log.Println("servers 1... are the others, tell those servers the Addr of the leader")
+    if len(os.Args) < 3 {
+        log.Println("usage: server [servernum] [paramFile]")
+        log.Println("servers 0... are the shuffling servers. Start them in order.")
+        log.Println("server -1 is the aux server. Start it last. ")
+        log.Println("paramFile format is numServers, blocks per msg, batch size, and all the server addresses (addr:port), each value on a separate line.")
         return
     } else {
-        numServers, _ = strconv.Atoi(os.Args[1])
-        msgBlocks, _ = strconv.Atoi(os.Args[2])
-        batchSize, _ = strconv.Atoi(os.Args[3])
-        serverNum, _ = strconv.Atoi(os.Args[4])
+        serverNum, _ = strconv.Atoi(os.Args[1])
+        paramFile = os.Args[2]
     }
     
-    if serverNum == 0 { //leader
-        leader(numServers, msgBlocks, batchSize)
-    } else if len(os.Args) < 6 {
-        log.Println("incorrect parameters, ask for help.")
-        return
-    } else { //not leader
-        addr = os.Args[5]
-        
-        if serverNum == -1 { //aux server
-            aux(numServers, msgBlocks, batchSize, addr)
-        } else { //normal server
-            server(numServers, msgBlocks, batchSize, serverNum, addr)
-        }
-    }
-    
-    //NOTE, I'll require the order the servers go online to be leader, aux, and then the other servers in increasing index order. Otherwise we'll have problems. This'll just make the setup code easier. 
-}
-
-//some utility functions used by the servers
-
-func readFromConn(conn net.Conn, bytes int) []byte {
-    buffer := make([]byte, bytes)
-    for count := 0; count < bytes; {
-        n, err := conn.Read(buffer[count:])
-        //log.Println(count)
-        //log.Println(bytes)
-        count += n
-        if err != nil && err != io.EOF && count != bytes {
-            log.Println(n, err)
-        }
-    }
-    return buffer
-}
-
-func writeToConn(conn net.Conn, msg []byte) {
-    n, err := conn.Write(msg)
+    file, err := os.Open(paramFile)
     if err != nil {
-        log.Println(n, err)
+        panic(err)
     }
-}
+    scanner := bufio.NewScanner(file)
+    scanner.Scan()
+    numServers, _ = strconv.Atoi(scanner.Text())
+    scanner.Scan()
+    msgBlocks, _ = strconv.Atoi(scanner.Text())
+    scanner.Scan()
+    batchSize, _ = strconv.Atoi(scanner.Text())
 
-func intToByte(myInt int) (retBytes []byte){
-    retBytes = make([]byte, 4)
-    retBytes[3] = byte((myInt >> 24) & 0xff)
-    retBytes[2] = byte((myInt >> 16) & 0xff)
-    retBytes[1] = byte((myInt >> 8) & 0xff)
-    retBytes[0] = byte(myInt & 0xff)
-    return
-}
-
-func byteToInt(myBytes []byte) (x int) {
-    x = int(myBytes[3]) << 24 + int(myBytes[2]) << 16 + int(myBytes[1]) << 8 + int(myBytes[0])
-    return
-}
-
-//merge the concatenation of flattened DBs into one DB
-//by taking the elementwise sum of all the DBs
-func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {
-    if dbSize % 16 != 0 || len(flatDBs) != numServers*dbSize {
-        panic("something is wrong with the MergeFlattenedDBs parameters")
+    //list of server addresses
+    addrs := make([]string, numServers)
+    ports := make([]string, numServers)
+    for i:=0; i < numServers; i++ {
+        scanner.Scan()
+        addrs[i] = scanner.Text()
+        //get the port number out
+        colonPos := strings.Index(addrs[i], ":")
+        if colonPos == -1 {
+            panic("server addresses must include :port")
+        }
+        ports[i] = addrs[i][colonPos:]
+    }
+    err = scanner.Err()
+    if err != nil {
+        panic(err)
+    }
+    file.Close()
+    
+    leader := false
+    myNum := serverNum
+    
+    if serverNum == -1 { //aux server
+        aux(numServers, msgBlocks, batchSize, addrs)
+        return
+    } else if serverNum == 0 {
+        log.Println("This server is the leader")
+        leader = true
+    } else {
+        log.Printf("This is server %d\n", serverNum)
     }
     
-    dbs := make([][]byte, numServers)
+    cer, err := tls.LoadX509KeyPair("server.crt", "server.key")
+    if err != nil {
+        log.Println(err)
+        return
+    }
+    config := &tls.Config{Certificates: []tls.Certificate{cer}}
+    ln, err := tls.Listen("tcp", ports[serverNum], config)  
+    if err != nil {
+        log.Println(err)
+        return
+    }
+    defer ln.Close()
+    
+    conf := &tls.Config{
+         InsecureSkipVerify: true,
+    }
+    
+    //set up connections between all the servers
+    //holds connections to the other shuffle servers
+    //conns[serverNum] will be empty
+    conns := make([]net.Conn, numServers)
+    
+    //each server connects to the ones with lower indices
+    //except at the end aux connects to all of them
+    //connect to lower numbered servers
+    for i:=0; i < serverNum; i++ {
+        conns[i], err = tls.Dial("tcp", addrs[i], conf)
+        if err != nil {
+            log.Println(err)
+            return 
+        }
+        defer conns[i].Close()
+        readFromConn(conns[i], 4)
+    }
+    
+    log.Println("connected to lower numbered servers")
+    
+    //wait for connections from higher numbered servers
+    for i:= serverNum+1; i < numServers; i++ {
+        conns[i], err = ln.Accept()
+        if err != nil {
+            log.Println(err)
+            return
+        }
+        conns[i].SetDeadline(time.Time{})
+        writeToConn(conns[i], intToByte(1))
+    }
+    
+    log.Println("connected to higher numbered servers")
+    
+    //connection from aux server
+    auxConn, err := ln.Accept()
+    if err != nil {
+        log.Println(err)
+        return
+    }
+    auxConn.SetDeadline(time.Time{})
+    writeToConn(auxConn, intToByte(1))
+    
+    log.Println("connected to aux server")
+    
+    //using a deterministic source of randomness for testing 
+    //this is just for testing so the different parties share a key
+    //in reality the public keys of the servers/auditors should be known 
+    //ahead of time and those would be used
+    pubKeys := make([]*[32]byte, numServers)
+    var mySecKey *[32]byte
     
     for i := 0; i < numServers; i++ {
-        dbs[i] = flatDBs[i*dbSize:(i+1)*dbSize]
+        if i == serverNum {
+            pubKeys[i], mySecKey, err = box.GenerateKey(strings.NewReader(strings.Repeat(strconv.Itoa(i),10000)))
+            if err != nil {
+                log.Println(err)
+                return
+            }
+        } else {
+            pubKeys[i], _, err = box.GenerateKey(strings.NewReader(strings.Repeat(strconv.Itoa(i),10000)))
+            if err != nil {
+                log.Println(err)
+                return
+            }
+        }
     }
     
-    return mycrypto.Merge(dbs)
-}
+    //some relevant values
+    //server share is longer because there needs to be space for a share of _each_ mac key share
+    serverShareLength := 16*msgBlocks + 32 + numServers * 16
+    blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
+    numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    dbSize := blocksPerRow*batchSize*16
+    
+    //data structure for holding batch of messages
+    //each entry will be of length serverShareLength
+    db := make([][]byte, batchSize)
+    for i:= 0; i < batchSize; i++ {
+        db[i] = make([]byte, serverShareLength)
+    }
 
-//check all the macs in a merged db
-//and decrypt the messages
-func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) ([][]byte, bool) {
-    outputDB := make([][]byte, batchSize)
-    keyShares := make([][]byte, numServers)
-    rowLen := msgBlocks*16 + 32 + numServers*16
-    success := true
+    //set up running average for timing
+    batchesCompleted := 0
+    var totalTime, totalBlindMacTime, totalShuffleTime, totalRevealTime time.Duration
     
-    //NOTE: this could probably be sped up by parallelizing the checking in chunks of rows
-    for i:=0; i < batchSize; i++ {
-        row := mergedDB[rowLen*i:rowLen*(i+1)]
-        for j:=0; j < numServers; j++ {
-            keyShares[j] = row[16*j:16*(j+1)]
+    
+    for {
+        
+        log.Println("server ready")
+        //receiving client connections phase 
+        if leader {
+            leaderReceivingPhase(db, conns, msgBlocks, batchSize, ln)
+        } else {
+            otherReceivingPhase(db, conns[0], numServers, msgBlocks, batchSize, pubKeys[serverNum], mySecKey, serverNum)
         }
-        tag := row[numServers*16:numServers*16+16]
-        msg := row[numServers*16+16:]
-        if !mycrypto.CheckMac(msg, tag, keyShares) {
-            success = false
+        
+        //processing phase
+        //NOTE: in reality, the blind verification and aux server stuff could be done as messages arrive
+        //this would speed up the processing time, esp. if the server were multithreaded
+        //but I'm handling everything for a batch at once so I can report performance for processing a batch
+        startTime := time.Now()
+
+        if leader {
+            //ping aux server
+            emptyByte := make([]byte, 4)
+            writeToConn(auxConn, emptyByte)
         }
-        outputDB[i] = mycrypto.DecryptCT(msg)
+        
+        //read beaver triples and share translation stuff
+        beavers := readFromConn(auxConn, numBeavers*48)
+        piBytes := readFromConn(auxConn, batchSize*4)
+        pi := make([]int, 0)
+        for i:=0; i < batchSize; i++ {
+            pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
+        }
+        delta := readFromConn(auxConn, dbSize)
+        abs := make([][]byte, numServers)
+        for i:=0; i < numServers; i++ {
+            abs[i] = readFromConn(auxConn, 2*dbSize)
+        }
+        
+        //if numServers > 2, timing starts here. If numServers == 2, timing starts with processing phase
+        if numServers > 2 {
+            startTime = time.Now()
+
+            //NOTE: time might appear worse than it really is since I'm not waiting on everyone receiving the preprocessing info before starting this stage, but I don't think it matters too much. I can change that if it does
+        }
+
+        blindMacStartTime := time.Now()
+        
+        //blind mac verification
+        
+        //expand the key shares into the individual mac key shares, mask them and the msg shares with part of a beaver triple
+        maskedStuff, myExpandedKeyShares := mycrypto.GetMaskedStuff(batchSize, msgBlocks, numServers, myNum, beavers, db)
+        
+        //everyone distributes shares and then merges them
+        broadcast(maskedStuff, conns, serverNum)
+        maskedShares := receiveFromAll(maskedStuff, conns, serverNum)
+                
+        mergedMaskedShares := mergeFlattenedDBs(maskedShares, numServers, len(maskedStuff))
+                
+        //everyone distributes (computed mac - provided tag) shares
+        macDiffShares := mycrypto.BeaverProduct(msgBlocks, numServers, batchSize, beavers, mergedMaskedShares, myExpandedKeyShares, db, leader)
+        
+        //broadcast shares and verify everything sums to 0
+        broadcast(macDiffShares, conns, serverNum)
+        finalMacDiffShares := receiveFromAll(macDiffShares, conns, serverNum)
+        
+        //verify the macs come out to 0
+        success := mycrypto.CheckSharesAreZero(batchSize, numServers, finalMacDiffShares)
+        if !success {
+            panic("blind mac verification failed")
+        }
+        
+        
+        blindMacElapsedTime := time.Since(blindMacStartTime)
+        shuffleStartTime := time.Now()
+        
+            
+        //TODO: shuffle
+        _, _ = delta, abs //TODO remove this once they're used
+        //it would be cool if I can write this in a way that applies to both 2 parties and k parties
+
+        
+        shuffleElapsedTime := time.Since(shuffleStartTime)
+        revealTimeStart := time.Now()
+        
+        
+        //commit, reveal, mac verify, decrypt
+        
+        //hash the whole db
+        flatDB, hash := mycrypto.FlattenAndHash(db)
+        
+        //send out hash (commitments)
+        broadcast(hash, conns, serverNum)
+        hashes := receiveFromAll(hash, conns, serverNum)
+        
+        //send out full DB after getting everyone's commitment
+        broadcast(flatDB, conns, serverNum)
+        flatDBs := receiveFromAll(flatDB, conns, serverNum)
+
+        //check that the received DBs match the received hashes
+        if !mycrypto.CheckHashes(hashes, flatDBs, dbSize) {
+            panic("hashes did not match")
+        }
+        //merge DBs
+        mergedDB := mergeFlattenedDBs(flatDBs, numServers, len(flatDB))
+        //check macs in merged DBs and decrypt
+        outputDB, ok := checkMacsAndDecrypt(mergedDB, numServers, msgBlocks, batchSize)
+        if !ok {
+            panic("macs did not verify")
+        }
+        
+        _ = outputDB 
+        
+        revealElapsedTime := time.Since(revealTimeStart)
+        elapsedTime := time.Since(startTime)
+        
+        //only the leader outputs the stats
+        if leader {
+
+            log.Println(outputDB);
+            
+            batchesCompleted++
+            totalTime += elapsedTime
+            totalBlindMacTime += blindMacElapsedTime
+            totalShuffleTime += shuffleElapsedTime
+            totalRevealTime += revealElapsedTime
+            log.Printf("%d servers, %d msgs per batch, %d byte messages\n", numServers, batchSize, msgBlocks*16)
+            log.Printf("blind mac time: %s, average: %s", blindMacElapsedTime, totalBlindMacTime/time.Duration(batchesCompleted))
+            log.Printf("shuffle time: %s, average: %s", shuffleElapsedTime, totalShuffleTime/time.Duration(batchesCompleted))
+            log.Printf("reveal time: %s, average: %s", revealElapsedTime, totalRevealTime/time.Duration(batchesCompleted))
+            log.Printf("batches completed: %d\n", batchesCompleted)
+            log.Printf("Time for this batch: %s\n", elapsedTime)
+            log.Printf("Average time per batch: %s\n\n\n", totalTime/time.Duration(batchesCompleted))
+        }
+        
     }
-    return outputDB, success
 }

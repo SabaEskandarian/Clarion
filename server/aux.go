@@ -3,21 +3,16 @@ package main
 import (
     "log"
     "crypto/tls"
-    //"net"
-    //"os"
+    "net"
     "time"
-    //"unsafe"
-    //"io"
-    "crypto/rand"
     "golang.org/x/crypto/nacl/box"
-    //"sync/atomic"
     "strconv"
     "strings"
     
     "shufflemessage/mycrypto" 
 )
 
-func aux (numServers, msgBlocks, batchSize int, leaderAddr string) {
+func aux (numServers, msgBlocks, batchSize int, addrs []string) {
     
     log.Println("This is the auxiliary server")
     
@@ -50,25 +45,35 @@ func aux (numServers, msgBlocks, batchSize int, leaderAddr string) {
          InsecureSkipVerify: true,
     }
     
-    //connect to server
-    conn, err := tls.Dial("tcp", leaderAddr, conf)
-    if err != nil {
-        log.Println(err)
-        return
-    }
-    defer conn.Close()
+    //connect to each server 
+    //holds connections to the shuffle servers
+    conns := make([]net.Conn, numServers)
     
-    var nonce [24]byte
+    for i:=0; i < numServers; i++ {
+        //connect to each server
+        conns[i], err = tls.Dial("tcp", addrs[i], conf)
+        if err != nil {
+            log.Println(err)
+            return
+        }
+        defer conns[i].Close()
+        readFromConn(conns[i], 4)
+    }
+
+    
     blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
         
     numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
     
     totalBatches := 0
     var totalTime time.Duration
+    blocker := make(chan int)
     
     for {
+        log.Println("ready")
         //leader requests triples and translations
-        readFromConn(conn, 4)
+        readFromConn(conns[0], 4)
+        log.Println("received request")
             
         startTime := time.Now()
         
@@ -78,39 +83,28 @@ func aux (numServers, msgBlocks, batchSize int, leaderAddr string) {
         
         perms, deltas, abs := mycrypto.GenShareTrans(batchSize, blocksPerRow, numServers)
 
-        //send leader server its stuff
-        writeToConn(conn, beavers[0])
-        writeToConn(conn, perms[0])
-        writeToConn(conn, deltas[0])
-        for j := 1; j < numServers; j++ {
-            writeToConn(conn, abs[j][0])
+
+        //send servers their stuff
+        for i:= 0; i < numServers; i++ {
+            go func(myBeavers, myPerm, myDelta []byte, abs [][][]byte, serverNum int) {
+                writeToConn(conns[serverNum], myBeavers)
+                writeToConn(conns[serverNum], myPerm)
+                writeToConn(conns[serverNum], myDelta)
+                for j:=0; j < numServers; j++ {
+                    if j!= i {
+                        writeToConn(conns[serverNum], abs[j][serverNum])
+                    }
+                }
+                blocker <- 1
+                return
+            } (beavers[i], perms[i], deltas[i], abs, i)
         }
         
-        //encrypt and send the shares for the non-leader servers
-        for i := 1; i < numServers; i++ {
-            //collect stuff to write to server i
-            stuffToWrite := make([]byte, 0)
-            stuffToWrite = append(stuffToWrite, beavers[i]...)
-            stuffToWrite = append(stuffToWrite, perms[i]...)
-            stuffToWrite = append(stuffToWrite, deltas[i]...)
-            for j:=0; j < numServers; j++{
-                if j!=i {
-                    stuffToWrite = append(stuffToWrite, abs[j][i]...)
-                }
-            }
-            
-            //box stuffToWrite
-            rand.Read(nonce[:])
-            if err != nil {
-                log.Println("couldn't generate nonce")
-                panic(err)
-            }
-            
-            box := box.SealAfterPrecomputation(nil, stuffToWrite, &nonce, &sharedKeys[i])
-                        
-            //send nonce and box to the leader
-            writeToConn(conn, append(nonce[:], box...))
+        for i:=0; i < numServers; i++ {
+            <- blocker
         }
+        
+
         
         elapsedTime := time.Since(startTime)
         totalTime += elapsedTime
