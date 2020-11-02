@@ -404,34 +404,37 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
                 currRow := i/blocksPerRow
                 currRowIndex := i%blocksPerRow
                 permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
-                permutedI := permRow+currRowIndex
+                permutedI := permRow*blocksPerRow+currRowIndex
                 
                 a.SetBytes(randA[16*i:16*(i+1)])
                 perma.SetBytes(randA[16*permutedI:16*(permutedI+1)])
                 b.SetBytes(randB[16*i:16*(i+1)])
                 
-                aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
-                aggregate.Add(&aggregate, &perma)
-                aggregate.Sub(&aggregate, &b)
-                copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
+                if timeStep != server {
+                    aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
+                    aggregate.Add(&aggregate, &perma)
+                    aggregate.Sub(&aggregate, &b)
+                    copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
+                }
+
                                 
                 //sAtPermTime
-                if timeStep != numServers-1 {
+                if timeStep != numServers-1 && timeStep != server {
                     aggregate.SetBytes(sAtPermTime[timeStep+1][16*i:16*(i+1)])
                     aggregate.Add(&aggregate, &b)
-                    copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], b.Bytes())
+                    copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], aggregate.Bytes())
                 }
                 
-                if timeStep != 0 {
+                if timeStep != 0 && timeStep != server && timeStep != server+1 {
                     aggregate.SetBytes(sAtPermTime[timeStep][16*i:16*(i+1)])
                     aggregate.Sub(&aggregate, &a)
-                    copy(sAtPermTime[timeStep][16*i:16*(i+1)], b.Bytes())
+                    copy(sAtPermTime[timeStep][16*i:16*(i+1)], aggregate.Bytes())
                 }
                 
             }
         }
     }
-    
+
     return perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas
 }
 
@@ -448,17 +451,15 @@ func TestGenShareTrans() bool {
         pis[1] = append(pis[1], byteToInt(perms[1][4*i:4*(i+1)]))
 
     }
-    
-    db := make([][]byte, 10)
-    for i:=0; i < 10; i++ {
-        db[i] = make([]byte, 5*16)
-    }
+    //log.Println(pis[0])
+    //log.Println(pis[1])
+
     flatDB := make([]byte, 50*16)
     
     //make aInitial values negative
     AddOrSub(flatDB, aInitial[1], false)
     
-    permuteFlatDB(db, flatDB, pis[0])
+    flatDB = permuteDB(flatDB, pis[0])
     
     AddOrSub(flatDB, deltas[0], true)
     
@@ -467,7 +468,7 @@ func TestGenShareTrans() bool {
     //server 1 starts here
     AddOrSub(flatDB, sAtPermTime[1], true)
     
-    permuteFlatDB(db, flatDB, pis[1])
+    flatDB = permuteDB(flatDB, pis[1])
         
     AddOrSub(flatDB, deltas[1], true)
     
@@ -479,24 +480,18 @@ func TestGenShareTrans() bool {
 }
 
 //just used for internal testing
-func permuteFlatDB(db [][]byte, flatDB []byte, pi []int) {
-    rowLen := len(db[0])
-    for i:=0; i < len(db); i++ {
-        db[i] = flatDB[i*rowLen:(i+1)*rowLen]
-    }
+func permuteDB(flatDB []byte, pi []int) []byte{
+    rowLen := len(flatDB)/len(pi)
+
+    permutedDB := make([]byte, len(flatDB))
     
-    batchSize := len(db)
-    tempRow := make([]byte, 0)
+
     //permute
-    for i:=0; i < batchSize; i++ {
-        tempRow = db[i]
-        db[i] = db[pi[i]]
-        db[pi[i]] = tempRow
+    for i:= 0; i < len(pi); i++ {
+        copy(permutedDB[i*rowLen:(i+1)*rowLen], flatDB[pi[i]*rowLen:(pi[i]+1)*rowLen])
     }
     
-    for i:= 0; i < len(db); i++ {
-        copy(flatDB[i*rowLen:(i+1)*rowLen], db[i])
-    }
+    return permutedDB
 }
 
 //hash an already flattened db

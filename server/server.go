@@ -19,10 +19,6 @@ import (
 
 func main() {
     
-    if !mycrypto.TestGenShareTrans() {
-        panic("share translation test failed")
-    }
-    
     numServers := 0
     msgBlocks := 0
     batchSize := 0    
@@ -288,7 +284,7 @@ func main() {
             }
             
             //permute and apply delta
-            permuteFlatDB(db, flatDB, pi)
+            flatDB = permuteDB(flatDB, pi)
             mycrypto.AddOrSub(flatDB, delta, true)
             
             //mask result and send to server 1
@@ -301,7 +297,7 @@ func main() {
             mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
             //permute and apply delta
-            permuteFlatDB(db, flatDB, pi)
+            flatDB = permuteDB(sAtPermTime, pi)
             mycrypto.AddOrSub(flatDB, delta, true)
             
             //mask and send to next server
@@ -314,7 +310,7 @@ func main() {
             mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
             //permute and apply delta
-            permuteFlatDB(db, flatDB, pi)
+            flatDB = permuteDB(sAtPermTime, pi)
             mycrypto.AddOrSub(flatDB, delta, true)
         }
         //bFinal is actually the db here for everyone except the final server
