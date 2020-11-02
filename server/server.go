@@ -19,6 +19,10 @@ import (
 
 func main() {
     
+    if !mycrypto.TestGenShareTrans() {
+        panic("share translation test failed")
+    }
+    
     numServers := 0
     msgBlocks := 0
     batchSize := 0    
@@ -179,6 +183,7 @@ func main() {
     for i:= 0; i < batchSize; i++ {
         db[i] = make([]byte, serverShareLength)
     }
+    flatDB := make([]byte, dbSize)
 
     //set up running average for timing
     batchesCompleted := 0
@@ -269,93 +274,51 @@ func main() {
         shuffleStartTime := time.Now()
         
             
-        //shuffle
-        //NOTE: some of this code could be refactored to avoide repetition
-        
-        rowLen := dbSize/batchSize
-        tempRow := make([]byte, rowLen)
+        //shuffle        
+        flatten(db, flatDB)
         if serverNum != 0 { //everyone masks their DB share and sends it to server 0
 
-            maskDBFlat(aInitial, db)
-            writeToConn(conns[0], aInitial)
+            mycrypto.AddOrSub(flatDB, aInitial, false)//false is for subtraction
+            writeToConn(conns[0], flatDB)
         } else { //server 0 does the shuffle
             
             //receive all the values masked with aInitial
             for i:=1; i < numServers; i++ {
-                maskDB(db, readFromConn(conns[i], dbSize))
+                mycrypto.AddOrSub(flatDB, readFromConn(conns[i], dbSize), true)
             }
             
-            //permute
-            for i:=0; i < batchSize; i++ {
-                tempRow = db[i]
-                db[i] = db[pi[i]]
-                db[pi[i]] = tempRow
-            }
-            
-            //apply delta
-            maskDB(db, delta)
+            //permute and apply delta
+            permuteFlatDB(db, flatDB, pi)
+            mycrypto.AddOrSub(flatDB, delta, true)
             
             //mask result and send to server 1
-            maskDBFlat(aAtPermTime, db)
-            writeToConn(conns[1], aAtPermTime)
-            
+            mycrypto.AddOrSub(flatDB, aAtPermTime, false)
+            writeToConn(conns[1], flatDB)
         }
-        
         //the middle servers take turns shuffling
         if serverNum != 0 && serverNum != numServers - 1 {
-            //complete the vector to be permuted
-            xor(sAtPermTime, readFromConn(conns[serverNum-1], dbSize))
+            //complete the vector to be permuted (read from prev server)             
+            mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
-            //unflatten sAtPermTime into db (we don't need dbs old contents right now)
-            for i:=0; i < batchSize; i++ {
-                db[i] = sAtPermTime[i*rowLen:(i+1)*rowLen]
-            }
-            
-            //permute
-            for i:=0; i < batchSize; i++ {
-                tempRow = db[i]
-                db[i] = db[pi[i]]
-                db[pi[i]] = tempRow
-            }
-            
-            //apply delta
-            maskDB(db, delta)
+            //permute and apply delta
+            permuteFlatDB(db, flatDB, pi)
+            mycrypto.AddOrSub(flatDB, delta, true)
             
             //mask and send to next server
-            maskDBFlat(aAtPermTime, db)
-            writeToConn(conns[serverNum+1], aAtPermTime)
-            
-            
+            mycrypto.AddOrSub(flatDB, aAtPermTime, false)
+            writeToConn(conns[serverNum+1], flatDB)
         }
-        
         //the last server shuffles
         if serverNum == numServers - 1 {
-            //complete the vector to be permuted
-            xor(sAtPermTime, readFromConn(conns[serverNum-1], dbSize))
+            //complete the vector to be permuted (read from prev server) 
+            mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
-            //unflatten sAtPermTime into db (we don't need dbs old contents right now)
-            for i:=0; i < batchSize; i++ {
-                db[i] = sAtPermTime[i*rowLen:(i+1)*rowLen]
-            }
-            
-            //permute
-            for i:=0; i < batchSize; i++ {
-                tempRow = db[i]
-                db[i] = db[pi[i]]
-                db[pi[i]] = tempRow
-            }
-            
-            //apply delta
-            maskDB(db, delta)
+            //permute and apply delta
+            permuteFlatDB(db, flatDB, pi)
+            mycrypto.AddOrSub(flatDB, delta, true)
         }
-        
-        
-        //bFinal is actually the db here for everyone except the final server, where it is still db. 
-        //so we'll make sure everyone has the flat db in flatDB
-        flatDB := make([]byte, 0)
-        if serverNum == numServers - 1 {
-            flatDB = mycrypto.Flatten(db)
-        } else {
+        //bFinal is actually the db here for everyone except the final server
+        if serverNum != numServers - 1 {
             flatDB = bFinal
         }
         

@@ -234,6 +234,22 @@ func Merge(shares [][]byte) []byte{
     return output
 }
 
+func AddOrSub(a, b []byte, add bool) {
+    var eltA, eltB modp.Element
+    for i :=0; i < len(a)/16; i++ {
+        eltA.SetBytes(a[16*i:16*(i+1)])
+        eltB.SetBytes(b[16*i:16*(i+1)])
+        
+        if add {
+            eltA.Add(&eltA, &eltB)
+        } else {
+            eltA.Sub(&eltA, &eltB)
+        }
+        
+        copy(a[16*i:16*(i+1)], eltA.Bytes())
+    }
+}
+
 //generate a permutation of the numbers [0, n)
 //NOTE: can this be made faster?
 //e.g., by statically allocating a bit perm instead of making a new slice each time?
@@ -353,18 +369,17 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
         }
         
         //initialize stuff
-        aInitial[i] = make([]byte, length)
-        aAtPermTime[i] = make([]byte, length)
-        bFinal[i] = make([]byte, length)
+        //aInitial[i] = make([]byte, length)
+        //aAtPermTime[i] = make([]byte, length)
+        //bFinal[i] = make([]byte, length)
         sAtPermTime[i] = make([]byte, length)
         deltas[i] = make([]byte, length)
     }
     
-    
-    randA := make([]byte, length)
-    randB := make([]byte, length)
     for timeStep := 0; timeStep < numServers; timeStep++ {
         for server := 0; server < numServers; server++ {
+            randA := make([]byte, length)
+            randB := make([]byte, length)
             _,err := rand.Read(randA)
             if err != nil {
                 panic("randomness issue in share translation generation")
@@ -383,22 +398,34 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             if timeStep == server+1 {
                 aAtPermTime[server] = randA
             }
-            
-            //deltas and sPermTime values are XORs of a bunch of other squares
-            
-            for i:=0; i < length; i++ {
-                currRow := i/(blocksPerRow*16)
-                currRowIndex := i%(blocksPerRow*16)
+                        
+            var perma, a, b, aggregate modp.Element
+            for i:=0; i < blocksPerRow*batchSize; i++ {
+                currRow := i/blocksPerRow
+                currRowIndex := i%blocksPerRow
                 permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
-                permutedI := 16*permRow+currRowIndex
-                deltas[timeStep][i] = deltas[timeStep][i] ^ randB[i] ^ randA[permutedI]
+                permutedI := permRow+currRowIndex
                 
+                a.SetBytes(randA[16*i:16*(i+1)])
+                perma.SetBytes(randA[16*permutedI:16*(permutedI+1)])
+                b.SetBytes(randB[16*i:16*(i+1)])
+                
+                aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
+                aggregate.Add(&aggregate, &perma)
+                aggregate.Sub(&aggregate, &b)
+                copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
+                                
                 //sAtPermTime
                 if timeStep != numServers-1 {
-                    sAtPermTime[timeStep+1][i] = sAtPermTime[timeStep][i] ^ randB[i]
+                    aggregate.SetBytes(sAtPermTime[timeStep+1][16*i:16*(i+1)])
+                    aggregate.Add(&aggregate, &b)
+                    copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], b.Bytes())
                 }
+                
                 if timeStep != 0 {
-                    sAtPermTime[timeStep][i] = sAtPermTime[timeStep][i] ^ randA[i]
+                    aggregate.SetBytes(sAtPermTime[timeStep][16*i:16*(i+1)])
+                    aggregate.Sub(&aggregate, &a)
+                    copy(sAtPermTime[timeStep][16*i:16*(i+1)], b.Bytes())
                 }
                 
             }
@@ -408,16 +435,68 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
     return perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas
 }
 
-//flatten and compute a hash of the db
-func Flatten(db [][]byte) ([]byte) {
+func TestGenShareTrans() bool {
     
-    flatDB := make([]byte, 0)
+    //batchSize 10, blocks per row 5, numServers 2
+    perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := GenShareTrans(10, 5, 2)
     
-    for i:= 0; i < len(db); i++ {
-        flatDB = append(flatDB, db[i]...)
+    pis := make([][]int, 2)
+    pis[0] = make([]int, 0)
+    pis[1] = make([]int, 0)
+    for i:=0; i < 10; i++ {
+        pis[0] = append(pis[0], byteToInt(perms[0][4*i:4*(i+1)]))
+        pis[1] = append(pis[1], byteToInt(perms[1][4*i:4*(i+1)]))
+
     }
     
-    return flatDB
+    db := make([][]byte, 10)
+    for i:=0; i < 10; i++ {
+        db[i] = make([]byte, 5*16)
+    }
+    flatDB := make([]byte, 50*16)
+    
+    //make aInitial values negative
+    AddOrSub(flatDB, aInitial[1], false)
+    
+    permuteFlatDB(db, flatDB, pis[0])
+    
+    AddOrSub(flatDB, deltas[0], true)
+    
+    AddOrSub(flatDB, aAtPermTime[0], false)
+    
+    //server 1 starts here
+    AddOrSub(flatDB, sAtPermTime[1], true)
+    
+    permuteFlatDB(db, flatDB, pis[1])
+        
+    AddOrSub(flatDB, deltas[1], true)
+    
+    AddOrSub(flatDB, bFinal[0], true)
+    
+    zero := make([]byte, 50*16)
+    
+    return bytes.Equal(flatDB, zero)
+}
+
+//just used for internal testing
+func permuteFlatDB(db [][]byte, flatDB []byte, pi []int) {
+    rowLen := len(db[0])
+    for i:=0; i < len(db); i++ {
+        db[i] = flatDB[i*rowLen:(i+1)*rowLen]
+    }
+    
+    batchSize := len(db)
+    tempRow := make([]byte, 0)
+    //permute
+    for i:=0; i < batchSize; i++ {
+        tempRow = db[i]
+        db[i] = db[pi[i]]
+        db[pi[i]] = tempRow
+    }
+    
+    for i:= 0; i < len(db); i++ {
+        copy(flatDB[i*rowLen:(i+1)*rowLen], db[i])
+    }
 }
 
 //hash an already flattened db

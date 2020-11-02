@@ -126,34 +126,34 @@ func byteToInt(myBytes []byte) (x int) {
     return
 }
 
-//mask a db by xoring a vector into it
-//modifies the array backing the mask
-func maskDBFlat(mask []byte, db [][]byte) {
-    rowLen := len(mask)/len(db)
-    for i:=0; i < len(db); i++ {
-        for j:=0; j< rowLen; j++ {
-            mask[i*rowLen+j] = mask[i*rowLen+j] ^ db[i][j]
-        }
+//flatten the db
+func flatten(db [][]byte, flatDB []byte){
+    rowLen := len(db[0])
+    for i:= 0; i < len(db); i++ {
+        copy(flatDB[i*rowLen:(i+1)*rowLen], db[i])
     }
 }
 
-//mask a db by xoring a vector into it
-//modifies the array backing the db
-func maskDB(db [][]byte, mask[]byte) {
-    rowLen := len(mask)/len(db)
+func unflatten(db [][]byte, flatDB []byte) {
+    rowLen := len(db[0])
     for i:=0; i < len(db); i++ {
-        for j:=0; j< rowLen; j++ {
-            db[i][j] = db[i][j] ^ mask[i*rowLen+j]
-        }
+        db[i] = flatDB[i*rowLen:(i+1)*rowLen]
     }
 }
 
-//xor together two vectors
-//modifies the array backing the first
-func xor(a, b []byte) {
-    for i:=0; i < len(a); i++ {
-        a[i] = a[i] ^ b[i]
+func permuteFlatDB(db [][]byte, flatDB []byte, pi []int) {
+    unflatten(db, flatDB)
+    
+    batchSize := len(db)
+    tempRow := make([]byte, 0)
+    //permute
+    for i:=0; i < batchSize; i++ {
+        tempRow = db[i]
+        db[i] = db[pi[i]]
+        db[pi[i]] = tempRow
     }
+    
+    flatten(db, flatDB)
 }
 
 //merge the concatenation of flattened DBs into one DB
