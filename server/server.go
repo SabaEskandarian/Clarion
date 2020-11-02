@@ -215,9 +215,20 @@ func main() {
             pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
         }
         delta := readFromConn(auxConn, dbSize)
-        abs := make([][]byte, numServers)
-        for i:=0; i < numServers; i++ {
-            abs[i] = readFromConn(auxConn, 2*dbSize)
+        
+        aInitial := make([]byte, 0)
+        sAtPermTime := make([]byte, 0)
+        bFinal := make([]byte, 0)
+        aAtPermTime := make([]byte, 0)
+        
+        if serverNum != 0 {
+            aInitial = readFromConn(auxConn, dbSize)
+            sAtPermTime = readFromConn(auxConn, dbSize)
+        }
+        
+        if serverNum != numServers - 1 {
+            bFinal = readFromConn(auxConn, dbSize)
+            aAtPermTime = readFromConn(auxConn, dbSize)
         }
         
         //if numServers > 2, timing starts here. If numServers == 2, timing starts with processing phase
@@ -258,10 +269,95 @@ func main() {
         shuffleStartTime := time.Now()
         
             
-        //TODO: shuffle
-        _, _ = delta, abs //TODO remove this once they're used
-        //it would be cool if I can write this in a way that applies to both 2 parties and k parties
+        //shuffle
+        //NOTE: some of this code could be refactored to avoide repetition
+        
+        rowLen := dbSize/batchSize
+        tempRow := make([]byte, rowLen)
+        if serverNum != 0 { //everyone masks their DB share and sends it to server 0
 
+            maskDBFlat(aInitial, db)
+            writeToConn(conns[0], aInitial)
+        } else { //server 0 does the shuffle
+            
+            //receive all the values masked with aInitial
+            for i:=1; i < numServers; i++ {
+                maskDB(db, readFromConn(conns[i], dbSize))
+            }
+            
+            //permute
+            for i:=0; i < batchSize; i++ {
+                tempRow = db[i]
+                db[i] = db[pi[i]]
+                db[pi[i]] = tempRow
+            }
+            
+            //apply delta
+            maskDB(db, delta)
+            
+            //mask result and send to server 1
+            maskDBFlat(aAtPermTime, db)
+            writeToConn(conns[1], aAtPermTime)
+            
+        }
+        
+        //the middle servers take turns shuffling
+        if serverNum != 0 && serverNum != numServers - 1 {
+            //complete the vector to be permuted
+            xor(sAtPermTime, readFromConn(conns[serverNum-1], dbSize))
+            
+            //unflatten sAtPermTime into db (we don't need dbs old contents right now)
+            for i:=0; i < batchSize; i++ {
+                db[i] = sAtPermTime[i*rowLen:(i+1)*rowLen]
+            }
+            
+            //permute
+            for i:=0; i < batchSize; i++ {
+                tempRow = db[i]
+                db[i] = db[pi[i]]
+                db[pi[i]] = tempRow
+            }
+            
+            //apply delta
+            maskDB(db, delta)
+            
+            //mask and send to next server
+            maskDBFlat(aAtPermTime, db)
+            writeToConn(conns[serverNum+1], aAtPermTime)
+            
+            
+        }
+        
+        //the last server shuffles
+        if serverNum == numServers - 1 {
+            //complete the vector to be permuted
+            xor(sAtPermTime, readFromConn(conns[serverNum-1], dbSize))
+            
+            //unflatten sAtPermTime into db (we don't need dbs old contents right now)
+            for i:=0; i < batchSize; i++ {
+                db[i] = sAtPermTime[i*rowLen:(i+1)*rowLen]
+            }
+            
+            //permute
+            for i:=0; i < batchSize; i++ {
+                tempRow = db[i]
+                db[i] = db[pi[i]]
+                db[pi[i]] = tempRow
+            }
+            
+            //apply delta
+            maskDB(db, delta)
+        }
+        
+        
+        //bFinal is actually the db here for everyone except the final server, where it is still db. 
+        //so we'll make sure everyone has the flat db in flatDB
+        flatDB := make([]byte, 0)
+        if serverNum == numServers - 1 {
+            flatDB = mycrypto.Flatten(db)
+        } else {
+            flatDB = bFinal
+        }
         
         shuffleElapsedTime := time.Since(shuffleStartTime)
         revealTimeStart := time.Now()
@@ -270,7 +366,7 @@ func main() {
         //commit, reveal, mac verify, decrypt
         
         //hash the whole db
-        flatDB, hash := mycrypto.FlattenAndHash(db)
+        hash := mycrypto.Hash(flatDB)
         
         //send out hash (commitments)
         broadcast(hash, conns, serverNum)

@@ -126,6 +126,36 @@ func byteToInt(myBytes []byte) (x int) {
     return
 }
 
+//mask a db by xoring a vector into it
+//modifies the array backing the mask
+func maskDBFlat(mask []byte, db [][]byte) {
+    rowLen := len(mask)/len(db)
+    for i:=0; i < len(db); i++ {
+        for j:=0; j< rowLen; j++ {
+            mask[i*rowLen+j] = mask[i*rowLen+j] ^ db[i][j]
+        }
+    }
+}
+
+//mask a db by xoring a vector into it
+//modifies the array backing the db
+func maskDB(db [][]byte, mask[]byte) {
+    rowLen := len(mask)/len(db)
+    for i:=0; i < len(db); i++ {
+        for j:=0; j< rowLen; j++ {
+            db[i][j] = db[i][j] ^ mask[i*rowLen+j]
+        }
+    }
+}
+
+//xor together two vectors
+//modifies the array backing the first
+func xor(a, b []byte) {
+    for i:=0; i < len(a); i++ {
+        a[i] = a[i] ^ b[i]
+    }
+}
+
 //merge the concatenation of flattened DBs into one DB
 //by taking the elementwise sum of all the DBs
 func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {

@@ -321,21 +321,26 @@ func TestGenBeavers() bool {
 }
 
 //generate permutations and share translations
-//returns a permutation for each server (first return value)
-//as well as a Delta for each permutation (second return value)
-//and a,b for each server for each permutation (third return value)
-func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte, [][][]byte) {
+//returns:
+//a permutation for each server 
+// a Delta for each server
+// initial masks a for each server
+// masks a for each server after they permute
+// an output b for each server from the last permutation
+// a value s that preprocesses input shares for each server's permutation
+func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte, [][]byte, [][]byte, [][]byte, [][]byte) {
     
     //perms is made of bytes so it can be transmitted easily
     perms := make([][]byte, numServers)
-    abs := make([][][]byte, numServers)
+    aInitial := make([][]byte, numServers)
+    aAtPermTime := make([][]byte, numServers)
+    bFinal := make([][]byte, numServers)
+    sAtPermTime := make([][]byte, numServers)
     deltas := make([][]byte, numServers)
-        
-    var pia,b,d modp.Element
-    
-    //length of a,b,d
+
+    //length of db
     length := batchSize*blocksPerRow*16
-    
+
     for i := 0; i < numServers; i++ {
         
         //generate permutation
@@ -347,45 +352,64 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             perms[i] = append(perms[i], intToByte(perm[j])...)
         }
         
-        //generate a, b
-        abs[i] = make([][]byte, numServers)
-        for j := 0; j < numServers; j++ {
-            abs[i][j] = make([]byte, 2*length)
-            
-            //when server i is permuting, all servers j != i get a,b
-            if i != j {
-                _,err := rand.Read(abs[i][j])
-                if err != nil {
-                    panic("randomness issue in share translation generation")
-                }
-            }            
-        }
-        
-        //generate delta
+        //initialize stuff
+        aInitial[i] = make([]byte, length)
+        aAtPermTime[i] = make([]byte, length)
+        bFinal[i] = make([]byte, length)
+        sAtPermTime[i] = make([]byte, length)
         deltas[i] = make([]byte, length)
-        //for every block of data in the db
-        for j := 0; j < batchSize; j++ {
-            for c:= 0; c < blocksPerRow; c++ {
-                //for each server's share
-                for k := 0; k < numServers; k++ {
-                    if k != i {
-                        //set d = \pi(a)-b
-                        currBlockNum := j*blocksPerRow+c
-                        permutedBlockNum := perm[j]*blocksPerRow+c
-                        pia.SetBytes(abs[i][k][permutedBlockNum*16:(permutedBlockNum+1)*16])
-                        b.SetBytes(abs[i][k][length+(currBlockNum)*16:length+(currBlockNum+1)*16])
-                        copy(deltas[i][currBlockNum*16:(currBlockNum+1)*16], d.Sub(&pia, &b).Bytes())
-                    }
+    }
+    
+    
+    randA := make([]byte, length)
+    randB := make([]byte, length)
+    for timeStep := 0; timeStep < numServers; timeStep++ {
+        for server := 0; server < numServers; server++ {
+            _,err := rand.Read(randA)
+            if err != nil {
+                panic("randomness issue in share translation generation")
+            }
+            _,err = rand.Read(randB)
+            if err != nil {
+                panic("randomness issue in share translation generation")
+            }
+            
+            if timeStep == 0 && server != 0 {
+                aInitial[server] = randA
+            }
+            if timeStep == numServers - 1 && server != numServers -1 {
+                bFinal[server] = randB
+            }
+            if timeStep == server+1 {
+                aAtPermTime[server] = randA
+            }
+            
+            //deltas and sPermTime values are XORs of a bunch of other squares
+            
+            for i:=0; i < length; i++ {
+                currRow := i/(blocksPerRow*16)
+                currRowIndex := i%(blocksPerRow*16)
+                permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
+                permutedI := 16*permRow+currRowIndex
+                deltas[timeStep][i] = deltas[timeStep][i] ^ randB[i] ^ randA[permutedI]
+                
+                //sAtPermTime
+                if timeStep != numServers-1 {
+                    sAtPermTime[timeStep+1][i] = sAtPermTime[timeStep][i] ^ randB[i]
                 }
+                if timeStep != 0 {
+                    sAtPermTime[timeStep][i] = sAtPermTime[timeStep][i] ^ randA[i]
+                }
+                
             }
         }
     }
     
-    return perms, deltas, abs
+    return perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas
 }
 
 //flatten and compute a hash of the db
-func FlattenAndHash(db [][]byte) ([]byte, []byte) {
+func Flatten(db [][]byte) ([]byte) {
     
     flatDB := make([]byte, 0)
     
@@ -393,8 +417,13 @@ func FlattenAndHash(db [][]byte) ([]byte, []byte) {
         flatDB = append(flatDB, db[i]...)
     }
     
+    return flatDB
+}
+
+//hash an already flattened db
+func Hash(flatDB []byte) []byte {
     hash := sha256.Sum256(flatDB)
-    return flatDB, hash[:]
+    return hash[:]
 }
 
 //NOTE: could use a goroutine to check hashes in parallel

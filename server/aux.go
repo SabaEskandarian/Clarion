@@ -81,23 +81,29 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
 
         beavers := mycrypto.GenBeavers(numBeavers, numServers)
         
-        perms, deltas, abs := mycrypto.GenShareTrans(batchSize, blocksPerRow, numServers)
+        perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := mycrypto.GenShareTrans(batchSize, blocksPerRow, numServers)
 
 
         //send servers their stuff
         for i:= 0; i < numServers; i++ {
-            go func(myBeavers, myPerm, myDelta []byte, abs [][][]byte, serverNum int) {
+            go func(myBeavers, myPerm, myAInitial, myAAtPermTime, myBFinal, mySAtPermTime, myDelta []byte,  serverNum int) {
                 writeToConn(conns[serverNum], myBeavers)
                 writeToConn(conns[serverNum], myPerm)
                 writeToConn(conns[serverNum], myDelta)
-                for j:=0; j < numServers; j++ {
-                    if j!= i {
-                        writeToConn(conns[serverNum], abs[j][serverNum])
-                    }
+                
+                if serverNum != 0 {
+                    writeToConn(conns[serverNum], myAInitial)
+                    writeToConn(conns[serverNum], mySAtPermTime)
                 }
+                
+                if serverNum != numServers - 1 {
+                    writeToConn(conns[serverNum], myBFinal)
+                    writeToConn(conns[serverNum], myAAtPermTime)
+                }
+                
                 blocker <- 1
                 return
-            } (beavers[i], perms[i], deltas[i], abs, i)
+            } (beavers[i], perms[i], aInitial[i], aAtPermTime[i], bFinal[i], sAtPermTime[i], deltas[i], i)
         }
         
         for i:=0; i < numServers; i++ {
