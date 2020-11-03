@@ -71,10 +71,7 @@ func main() {
             
             for i := 0; i < numMsgs; i++ {
                 
-                msgType :=0
-                if i < 26 {
-                    msgType += i
-                }
+                msgType := i % 26
             
                 elapsedTime := clientConnection(server, msgType, msgBlocks, pubKeys);
 

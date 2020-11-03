@@ -356,24 +356,38 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
 
     //length of db
     length := batchSize*blocksPerRow*16
+    
+    
+    permChan := make(chan []byte)
+    newSliceChan := make(chan []byte)
 
-    for i := 0; i < numServers; i++ {
-        
-        //generate permutation
-        perm := GenPerm(batchSize)
-                
-        //make the byte version of perm too
-        perms[i] = make([]byte, 0)
-        for j := 0; j < batchSize; j++ {
-            perms[i] = append(perms[i], intToByte(perm[j])...)
-        }
-        
-        //initialize stuff
-        //aInitial[i] = make([]byte, length)
-        //aAtPermTime[i] = make([]byte, length)
-        //bFinal[i] = make([]byte, length)
-        sAtPermTime[i] = make([]byte, length)
-        deltas[i] = make([]byte, length)
+    for i:=0; i < numServers; i++ {
+        //generate the permutations in parallel
+        go func() {
+            //generate permutation
+            perm := GenPerm(batchSize)
+                    
+            //make the byte version of perm too
+            bytePerm := make([]byte, 0)
+            for j := 0; j < batchSize; j++ {
+                bytePerm = append(bytePerm, intToByte(perm[j])...)
+            }
+            
+            permChan <- bytePerm
+            
+            //initialize stuff
+            newSlice1 := make([]byte, length)
+            newSlice2 := make([]byte, length)
+            
+            newSliceChan <- newSlice1
+            newSliceChan <- newSlice2
+        }()
+    }
+    
+    for i:= 0; i < numServers; i++ {
+        perms[i] = <- permChan
+        sAtPermTime[i] = <- newSliceChan
+        deltas[i] = <- newSliceChan
     }
     
     for timeStep := 0; timeStep < numServers; timeStep++ {
@@ -398,39 +412,72 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             if timeStep == server+1 {
                 aAtPermTime[server] = randA
             }
+            
+            //Do this part in parallel
+            numRoutines := 16
+            numEntries := blocksPerRow*batchSize
+            chunkSize := numEntries/numRoutines
+            blocker := make(chan int)
+            
+            for j:=0; j < numRoutines; j++ {
+                
+                startIndex := j*chunkSize
+                endIndex := (j+1)*chunkSize
+                
+                //log.Printf("chunk from %d to %d\n", startIndex, endIndex)
+                
+                if numEntries % numRoutines != 0 {
+                    log.Println("16 does not divide blocksPerRow*batchSize, going single-threaded. Make this value divisible by 16 for better performance.")
+                    startIndex = 0
+                    endIndex = numEntries
+                    j = numRoutines - 1
+                }
+                go func(startI, endI int) {
+                    for i:=startI; i < endI; i++ {
+                        var perma, a, b, aggregate modp.Element
                         
-            var perma, a, b, aggregate modp.Element
-            for i:=0; i < blocksPerRow*batchSize; i++ {
-                currRow := i/blocksPerRow
-                currRowIndex := i%blocksPerRow
-                permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
-                permutedI := permRow*blocksPerRow+currRowIndex
-                
-                a.SetBytes(randA[16*i:16*(i+1)])
-                perma.SetBytes(randA[16*permutedI:16*(permutedI+1)])
-                b.SetBytes(randB[16*i:16*(i+1)])
-                
-                if timeStep != server {
-                    aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
-                    aggregate.Add(&aggregate, &perma)
-                    aggregate.Sub(&aggregate, &b)
-                    copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
-                }
+                        currRow := i/blocksPerRow
+                        currRowIndex := i%blocksPerRow
+                        permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
+                        permutedI := permRow*blocksPerRow+currRowIndex
+                        
+                        
+                        if timeStep != server {
+                            a.SetBytes(randA[16*i:16*(i+1)])
+                            perma.SetBytes(randA[16*permutedI:16*(permutedI+1)])
+                            b.SetBytes(randB[16*i:16*(i+1)])
+                            
+                            aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
+                            aggregate.Add(&aggregate, &perma)
+                            aggregate.Sub(&aggregate, &b)
+                            copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
+                        }
 
-                                
-                //sAtPermTime
-                if timeStep != numServers-1 && timeStep != server {
-                    aggregate.SetBytes(sAtPermTime[timeStep+1][16*i:16*(i+1)])
-                    aggregate.Add(&aggregate, &b)
-                    copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], aggregate.Bytes())
+                                        
+                        //sAtPermTime
+                        if timeStep != numServers-1 && timeStep != server {
+                            aggregate.SetBytes(sAtPermTime[timeStep+1][16*i:16*(i+1)])
+                            aggregate.Add(&aggregate, &b)
+                            copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], aggregate.Bytes())
+                        }
+                        
+                        if timeStep != 0 && timeStep != server && timeStep != server+1 {
+                            aggregate.SetBytes(sAtPermTime[timeStep][16*i:16*(i+1)])
+                            aggregate.Sub(&aggregate, &a)
+                            copy(sAtPermTime[timeStep][16*i:16*(i+1)], aggregate.Bytes())
+                        }
+                        
+                    }
+                    blocker <- 1
+                }(startIndex, endIndex)
+            }
+            
+            if numEntries % numRoutines != 0 {
+                <- blocker
+            } else {
+                for j:=0; j < numRoutines; j++ {
+                    <- blocker
                 }
-                
-                if timeStep != 0 && timeStep != server && timeStep != server+1 {
-                    aggregate.SetBytes(sAtPermTime[timeStep][16*i:16*(i+1)])
-                    aggregate.Sub(&aggregate, &a)
-                    copy(sAtPermTime[timeStep][16*i:16*(i+1)], aggregate.Bytes())
-                }
-                
             }
         }
     }
