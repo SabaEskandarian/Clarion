@@ -185,6 +185,12 @@ func main() {
     batchesCompleted := 0
     var totalTime, totalBlindMacTime, totalShuffleTime, totalRevealTime time.Duration
     
+    numThreads, _ := mycrypto.PickNumThreads(batchSize)
+
+    log.Printf("using %d threads", numThreads)
+    if numThreads != 16 {
+        log.Println("performance could be improved by using a batchSize divisible by 16")
+    }
     
     for {
         

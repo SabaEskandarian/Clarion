@@ -175,23 +175,37 @@ func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {
 //and decrypt the messages
 func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) ([][]byte, bool) {
     outputDB := make([][]byte, batchSize)
-    keyShares := make([][]byte, numServers)
     rowLen := msgBlocks*16 + 32 + numServers*16
     success := true
     
-    //NOTE: this could probably be sped up by parallelizing the checking in chunks of rows
-    for i:=0; i < batchSize; i++ {
-        row := mergedDB[rowLen*i:rowLen*(i+1)]
-        for j:=0; j < numServers; j++ {
-            keyShares[j] = row[16*j:16*(j+1)]
-        }
-        tag := row[numServers*16:numServers*16+16]
-        msg := row[numServers*16+16:]
-        if !mycrypto.CheckMac(msg, tag, keyShares) {
-            success = false
-        }
-        outputDB[i] = mycrypto.DecryptCT(msg)
+    numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
+    blocker := make(chan int)
+    
+    for t:=0; t < numThreads; t++ {
+        startIndex := t*chunkSize
+        endIndex := (t+1)*chunkSize
+        go func(startI, endI int) {
+            keyShares := make([][]byte, numServers)
+            for i:=startI; i < endI; i++ {
+                row := mergedDB[rowLen*i:rowLen*(i+1)]
+                for j:=0; j < numServers; j++ {
+                    keyShares[j] = row[16*j:16*(j+1)]
+                }
+                tag := row[numServers*16:numServers*16+16]
+                msg := row[numServers*16+16:]
+                if !mycrypto.CheckMac(msg, tag, keyShares) {
+                    success = false
+                }
+                outputDB[i] = mycrypto.DecryptCT(msg)
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
     }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
+    
     return outputDB, success
 }
 

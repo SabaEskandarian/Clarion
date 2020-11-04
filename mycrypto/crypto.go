@@ -211,17 +211,30 @@ func Merge(shares [][]byte) []byte{
         elements = append(elements, temp.SetBytes(shares[0][16*j:16*(j+1)]))
     }
     
+    numThreads, chunkSize := PickNumThreads(numBlocks)
+    blocker := make(chan int)
+    
     //add in the corresponding elements from subsequent shares
     for i:=1; i < numShares; i++ {
         if len(shares[i]) != len(shares[0]) {
             panic("messages being merged have different lengths")
         }
         
-        var temp modp.Element
+        for t := 0; t<numThreads; t++ {
+            startIndex := t*chunkSize
+            endIndex := (t+1)*chunkSize
+            go func(startJ, endJ int) {
+                var temp modp.Element
+                for j:=startJ; j < endJ; j++ {
+                    temp.SetBytes(shares[i][16*j:16*(j+1)])
+                    elements[j].Add(elements[j], &temp)
+                }
+                blocker <- 1
+            }(startIndex, endIndex)
+        }
         
-        for j:=0; j < numBlocks; j++ {
-            temp.SetBytes(shares[i][16*j:16*(j+1)])
-            elements[j].Add(elements[j], &temp)
+        for j:=0; j < numThreads; j++ {
+            <- blocker
         }
     }
     
@@ -234,19 +247,54 @@ func Merge(shares [][]byte) []byte{
     return output
 }
 
-func AddOrSub(a, b []byte, add bool) {
-    var eltA, eltB modp.Element
-    for i :=0; i < len(a)/16; i++ {
-        eltA.SetBytes(a[16*i:16*(i+1)])
-        eltB.SetBytes(b[16*i:16*(i+1)])
-        
-        if add {
-            eltA.Add(&eltA, &eltB)
+func PickNumThreads(size int) (int,int) {
+    numThreads := 16
+    if size % 16 != 0 {
+        //log.Println("using batchSize divisible by 16 will give better performance")
+        if size % 8 == 0 {
+            numThreads = 8
+        } else if size % 4 == 0 {
+            numThreads = 4
+        } else if size % 2 == 0 {
+            numThreads = 2
         } else {
-            eltA.Sub(&eltA, &eltB)
+            numThreads = 1
         }
-        
-        copy(a[16*i:16*(i+1)], eltA.Bytes())
+        //log.Printf("using %d threads\n", numThreads)
+    }
+    return numThreads, size/numThreads
+}
+
+func AddOrSub(a, b []byte, add bool) {
+    numBlocks := len(a)/16
+    
+    numThreads,chunkSize := PickNumThreads(numBlocks)
+    
+    blocker := make(chan int)
+    
+    for j:=0; j < numThreads; j++ {
+        startIndex := j*chunkSize
+        endIndex := (j+1)*chunkSize
+        go func(startI, endI int) {
+            var eltA, eltB modp.Element
+            for i :=startI; i < endI; i++ {
+                eltA.SetBytes(a[16*i:16*(i+1)])
+                eltB.SetBytes(b[16*i:16*(i+1)])
+                
+                if add {
+                    eltA.Add(&eltA, &eltB)
+                } else {
+                    eltA.Sub(&eltA, &eltB)
+                }
+                
+                copy(a[16*i:16*(i+1)], eltA.Bytes())
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
+    }
+    
+    for i:= 0; i < numThreads; i++ {
+        <- blocker
     }
 }
 
@@ -390,6 +438,10 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
         deltas[i] = <- newSliceChan
     }
     
+    numEntries := blocksPerRow*batchSize
+    numThreads, chunkSize := PickNumThreads(numEntries)
+    blocker := make(chan int)
+    
     for timeStep := 0; timeStep < numServers; timeStep++ {
         for server := 0; server < numServers; server++ {
             randA := make([]byte, length)
@@ -414,24 +466,14 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             }
             
             //Do this part in parallel
-            numRoutines := 16
-            numEntries := blocksPerRow*batchSize
-            chunkSize := numEntries/numRoutines
-            blocker := make(chan int)
-            
-            for j:=0; j < numRoutines; j++ {
+
+            for j:=0; j < numThreads; j++ {
                 
                 startIndex := j*chunkSize
                 endIndex := (j+1)*chunkSize
                 
                 //log.Printf("chunk from %d to %d\n", startIndex, endIndex)
                 
-                if numEntries % numRoutines != 0 {
-                    log.Println("16 does not divide blocksPerRow*batchSize, going single-threaded. Make this value divisible by 16 for better performance.")
-                    startIndex = 0
-                    endIndex = numEntries
-                    j = numRoutines - 1
-                }
                 go func(startI, endI int) {
                     for i:=startI; i < endI; i++ {
                         var perma, a, b, aggregate modp.Element
@@ -472,12 +514,8 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
                 }(startIndex, endIndex)
             }
             
-            if numEntries % numRoutines != 0 {
+            for j:=0; j < numThreads; j++ {
                 <- blocker
-            } else {
-                for j:=0; j < numRoutines; j++ {
-                    <- blocker
-                }
             }
         }
     }
@@ -633,30 +671,45 @@ func BeaverProduct(msgBlocks, numServers, batchSize int, beavers, mergedMaskedSh
 
 //get all the masked stuff together for the blind mac verification
 func GetMaskedStuff(batchSize, msgBlocks, numServers, myNum int, beavers []byte, db [][]byte) ([]byte, [][]byte) {
-    maskedExpandedKeyShares := make([]byte, 0)
-    maskedMsgShares := make([]byte, 0)
-    var value, mask modp.Element
+    maskedExpandedKeyShares := make([]byte, 16*batchSize*(msgBlocks+1))
+    maskedMsgShares := make([]byte, 16*batchSize*(msgBlocks+1))
     
     myExpandedKeyShares := make([][]byte, batchSize)
     
-    for i:=0; i < batchSize; i++ {
-        myExpandedKeyShares[i] = AesPRG((msgBlocks+1)*16, db[i][myNum*16:(myNum+1)*16])
-        for j:=0; j < msgBlocks+1; j++ {
-            //mask the key component
-            value.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
-            beaverIndex := 48*(msgBlocks+1)*i + 48*j
-            mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
-            value.Sub(&value, &mask)
-            maskedExpandedKeyShares = append(maskedExpandedKeyShares, value.Bytes()...)
-            
-            //mask the message component
-            msgIndex := numServers*16 + 16 + 16*j
-            beaverIndex += 16
-            value.SetBytes(db[i][msgIndex:msgIndex+16])
-            mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
-            value.Sub(&value,&mask)
-            maskedMsgShares = append(maskedMsgShares, value.Bytes()...)
-        }
+    numThreads, chunkSize := PickNumThreads(batchSize)
+    blocker := make(chan int)
+    
+    for t:= 0; t < numThreads; t++ {
+        startIndex := chunkSize*t
+        endIndex := chunkSize*(t+1)
+        go func(startI, endI int) {
+            var value, mask modp.Element
+            for i:=startI; i < endI; i++ {
+                myExpandedKeyShares[i] = AesPRG((msgBlocks+1)*16, db[i][myNum*16:(myNum+1)*16])
+                for j:=0; j < msgBlocks+1; j++ {
+                    //mask the key component
+                    value.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
+                    beaverIndex := 48*(msgBlocks+1)*i + 48*j
+                    mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
+                    value.Sub(&value, &mask)
+                    index := 16*(msgBlocks+1)*i + 16*j
+                    copy(maskedExpandedKeyShares[index:index+16], value.Bytes())
+                    
+                    //mask the message component
+                    msgIndex := numServers*16 + 16 + 16*j
+                    beaverIndex += 16
+                    value.SetBytes(db[i][msgIndex:msgIndex+16])
+                    mask.SetBytes(beavers[beaverIndex:beaverIndex+16])
+                    value.Sub(&value,&mask)
+                    copy(maskedMsgShares[index:index+16], value.Bytes())
+                }
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
     }
     
     maskedStuff := append(maskedExpandedKeyShares, maskedMsgShares...)
