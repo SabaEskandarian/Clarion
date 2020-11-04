@@ -1,6 +1,0 @@
-3
-64
-100
-localhost:4330
-localhost:4331
-localhost:4332

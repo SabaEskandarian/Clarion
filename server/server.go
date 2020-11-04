@@ -24,45 +24,73 @@ func main() {
     batchSize := 0    
     serverNum := 0
     paramFile := ""
+    paramNum := 0
     
     log.SetFlags(log.Lshortfile)
         
-    if len(os.Args) < 3 {
-        log.Println("usage: server [servernum] [paramFile]")
+    if len(os.Args) < 4 {
+        log.Println("usage: server [servernum] [paramFile] [paramChoice]")
         log.Println("servers 0... are the shuffling servers. Start them in order.")
         log.Println("server -1 is the aux server. Start it last. ")
-        log.Println("paramFile format is numServers, blocks per msg, batch size, and all the server addresses (addr:port), each value on a separate line.")
+        log.Println("paramFile format is all the server addresses (addr:port), each value on a separate line. Then there's any number of sets of 4 lines holding 'PARAMS', numServers, blocks per msg, and batch size. [paramChoice] is a number i that picks the ith set of parameters to run the system with (i starting at 1). ")
         return
     } else {
         serverNum, _ = strconv.Atoi(os.Args[1])
         paramFile = os.Args[2]
+        paramNum,_ = strconv.Atoi(os.Args[3])
+    }
+    
+    if paramNum == 0 {
+        log.Println("paramChoice starts at 1")
+        return
     }
     
     file, err := os.Open(paramFile)
     if err != nil {
         panic(err)
     }
+    addrs := make([]string, 0)
+    ports := make([]string, 0)
     scanner := bufio.NewScanner(file)
+    scanner.Scan()
+    for i:= 0; scanner.Text() != "PARAMS"; i++ {
+        addrs = append(addrs, scanner.Text())
+        //get the port number out
+        colonPos := strings.Index(addrs[i], ":")
+        if colonPos == -1 {
+            panic("server addresses must include :port")
+        }
+        ports = append(ports, addrs[i][colonPos:])
+        scanner.Scan()
+    }
+    
+    paramCount := 1
+    
+    for paramCount < paramNum {
+        scanner.Scan()
+        scanner.Scan()
+        scanner.Scan()
+        scanner.Scan()
+        paramCount++
+    }
+    
     scanner.Scan()
     numServers, _ = strconv.Atoi(scanner.Text())
     scanner.Scan()
     msgBlocks, _ = strconv.Atoi(scanner.Text())
     scanner.Scan()
     batchSize, _ = strconv.Atoi(scanner.Text())
-
-    //list of server addresses
-    addrs := make([]string, numServers)
-    ports := make([]string, numServers)
-    for i:=0; i < numServers; i++ {
-        scanner.Scan()
-        addrs[i] = scanner.Text()
-        //get the port number out
-        colonPos := strings.Index(addrs[i], ":")
-        if colonPos == -1 {
-            panic("server addresses must include :port")
-        }
-        ports[i] = addrs[i][colonPos:]
+    
+    if numServers == 0 {
+        log.Println("numServers is 0. Perhaps there is a params error?")
+        return
     }
+    
+    
+    log.Printf("numServers %d\n", numServers)
+    log.Printf("msgBlocks %d\n", msgBlocks)
+    log.Printf("batchSize %d\n", batchSize)
+
     err = scanner.Err()
     if err != nil {
         panic(err)
@@ -361,7 +389,7 @@ func main() {
         //only the leader outputs the stats
         if leader {
 
-            log.Println(outputDB);
+            //log.Println(outputDB);
             
             batchesCompleted++
             totalTime += elapsedTime
