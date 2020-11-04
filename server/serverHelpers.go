@@ -141,20 +141,6 @@ func unflatten(db [][]byte, flatDB []byte) {
     }
 }
 
-func permuteDB(flatDB []byte, pi []int) []byte{
-    rowLen := len(flatDB)/len(pi)
-
-    permutedDB := make([]byte, len(flatDB))
-    
-
-    //permute
-    for i:= 0; i < len(pi); i++ {
-        copy(permutedDB[i*rowLen:(i+1)*rowLen], flatDB[pi[i]*rowLen:(pi[i]+1)*rowLen])
-    }
-    
-    return permutedDB
-}
-
 //merge the concatenation of flattened DBs into one DB
 //by taking the elementwise sum of all the DBs
 func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {

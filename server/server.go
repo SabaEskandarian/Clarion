@@ -49,6 +49,7 @@ func main() {
     if err != nil {
         panic(err)
     }
+    
     addrs := make([]string, 0)
     ports := make([]string, 0)
     scanner := bufio.NewScanner(file)
@@ -317,12 +318,9 @@ func main() {
                 mycrypto.AddOrSub(flatDB, readFromConn(conns[i], dbSize), true)
             }
             
-            //permute and apply delta
-            flatDB = permuteDB(flatDB, pi)
-            mycrypto.AddOrSub(flatDB, delta, true)
-            
-            //mask result and send to server 1
-            mycrypto.AddOrSub(flatDB, aAtPermTime, false)
+            //permute and apply delta, mask result and send to server 1
+            flatDB = mycrypto.PermuteDB(flatDB, pi)
+            mycrypto.DoubleAddOrSub(flatDB, delta, aAtPermTime, true, false)
             writeToConn(conns[1], flatDB)
         }
         //the middle servers take turns shuffling
@@ -330,12 +328,9 @@ func main() {
             //complete the vector to be permuted (read from prev server)             
             mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
-            //permute and apply delta
-            flatDB = permuteDB(sAtPermTime, pi)
-            mycrypto.AddOrSub(flatDB, delta, true)
-            
-            //mask and send to next server
-            mycrypto.AddOrSub(flatDB, aAtPermTime, false)
+            //permute and apply delta, mask and send to next server
+            flatDB = mycrypto.PermuteDB(sAtPermTime, pi)
+            mycrypto.DoubleAddOrSub(flatDB, delta, aAtPermTime, true, false)
             writeToConn(conns[serverNum+1], flatDB)
         }
         //the last server shuffles
@@ -344,7 +339,7 @@ func main() {
             mycrypto.AddOrSub(sAtPermTime, readFromConn(conns[serverNum-1], dbSize), true)
             
             //permute and apply delta
-            flatDB = permuteDB(sAtPermTime, pi)
+            flatDB = mycrypto.PermuteDB(sAtPermTime, pi)
             mycrypto.AddOrSub(flatDB, delta, true)
         }
         //bFinal is actually the db here for everyone except the final server

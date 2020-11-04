@@ -298,6 +298,47 @@ func AddOrSub(a, b []byte, add bool) {
     }
 }
 
+//we often do 2 add/subtract ops in a row. This should save some format converting
+func DoubleAddOrSub(a, b, c []byte, add1, add2 bool) {
+    numBlocks := len(a)/16
+    
+    numThreads,chunkSize := PickNumThreads(numBlocks)
+    
+    blocker := make(chan int)
+    
+    for j:=0; j < numThreads; j++ {
+        startIndex := j*chunkSize
+        endIndex := (j+1)*chunkSize
+        go func(startI, endI int) {
+            var eltA, eltB, eltC modp.Element
+            for i :=startI; i < endI; i++ {
+                eltA.SetBytes(a[16*i:16*(i+1)])
+                eltB.SetBytes(b[16*i:16*(i+1)])
+                eltC.SetBytes(c[16*i:16*(i+1)])
+                
+                if add1 {
+                    eltA.Add(&eltA, &eltB)
+                } else {
+                    eltA.Sub(&eltA, &eltB)
+                }
+                
+                if add2 {
+                    eltA.Add(&eltA, &eltC)
+                } else {
+                    eltA.Sub(&eltA, &eltC)
+                }
+                
+                copy(a[16*i:16*(i+1)], eltA.Bytes())
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
+    }
+    
+    for i:= 0; i < numThreads; i++ {
+        <- blocker
+    }
+}
+
 //generate a permutation of the numbers [0, n)
 //NOTE: can this be made faster?
 //e.g., by statically allocating a bit perm instead of making a new slice each time?
@@ -395,6 +436,7 @@ func TestGenBeavers() bool {
 func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte, [][]byte, [][]byte, [][]byte, [][]byte) {
     
     //perms is made of bytes so it can be transmitted easily
+    intPerms := make([][]int, numServers)
     perms := make([][]byte, numServers)
     aInitial := make([][]byte, numServers)
     aAtPermTime := make([][]byte, numServers)
@@ -405,8 +447,8 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
     //length of db
     length := batchSize*blocksPerRow*16
     
-    
     permChan := make(chan []byte)
+    intPermChan := make(chan []int)
     newSliceChan := make(chan []byte)
 
     for i:=0; i < numServers; i++ {
@@ -422,107 +464,93 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             }
             
             permChan <- bytePerm
+            intPermChan <- perm
             
             //initialize stuff
             newSlice1 := make([]byte, length)
             newSlice2 := make([]byte, length)
+            newSlice3 := make([]byte, length)
+            newSlice4 := make([]byte, length)
+            newSlice5 := make([]byte, length)
             
             newSliceChan <- newSlice1
             newSliceChan <- newSlice2
+            newSliceChan <- newSlice3
+            newSliceChan <- newSlice4
+            newSliceChan <- newSlice5
         }()
     }
     
     for i:= 0; i < numServers; i++ {
         perms[i] = <- permChan
+        intPerms[i] = <- intPermChan
+        aInitial[i] = <- newSliceChan
+        bFinal[i] = <- newSliceChan
         sAtPermTime[i] = <- newSliceChan
+        aAtPermTime[i] = <- newSliceChan
         deltas[i] = <- newSliceChan
     }
     
-    numEntries := blocksPerRow*batchSize
-    numThreads, chunkSize := PickNumThreads(numEntries)
-    blocker := make(chan int)
+    aInitSum := make([]byte, length)
+    bFinalSum := make([]byte, length)
+    temp := make([]byte, 0)
+    var err error
     
-    for timeStep := 0; timeStep < numServers; timeStep++ {
-        for server := 0; server < numServers; server++ {
-            randA := make([]byte, length)
-            randB := make([]byte, length)
-            _,err := rand.Read(randA)
+    for i:=0; i < numServers; i++ {
+        
+        if i != 0 {
+            _,err = rand.Read(aInitial[i])
             if err != nil {
                 panic("randomness issue in share translation generation")
             }
-            _,err = rand.Read(randB)
+            AddOrSub(aInitSum, aInitial[i], false)
+            
+            _,err = rand.Read(sAtPermTime[i])
+            if err != nil {
+                panic("randomness issue in share translation generation")
+            }
+        }
+        
+        if i != numServers - 1 {
+            _,err = rand.Read(aAtPermTime[i])
             if err != nil {
                 panic("randomness issue in share translation generation")
             }
             
-            if timeStep == 0 && server != 0 {
-                aInitial[server] = randA
+            _,err = rand.Read(deltas[i])
+            if err != nil {
+                panic("randomness issue in share translation generation")
             }
-            if timeStep == numServers - 1 && server != numServers -1 {
-                bFinal[server] = randB
-            }
-            if timeStep == server+1 {
-                aAtPermTime[server] = randA
-            }
-            
-            //Do this part in parallel
 
-            for j:=0; j < numThreads; j++ {
-                
-                startIndex := j*chunkSize
-                endIndex := (j+1)*chunkSize
-                
-                //log.Printf("chunk from %d to %d\n", startIndex, endIndex)
-                
-                go func(startI, endI int) {
-                    for i:=startI; i < endI; i++ {
-                        var perma, a, b, aggregate modp.Element
-                        
-                        currRow := i/blocksPerRow
-                        currRowIndex := i%blocksPerRow
-                        permRow := byteToInt(perms[timeStep][4*currRow:4*(currRow+1)])
-                        permutedI := permRow*blocksPerRow+currRowIndex
-                        
-                        
-                        if timeStep != server {
-                            a.SetBytes(randA[16*i:16*(i+1)])
-                            perma.SetBytes(randA[16*permutedI:16*(permutedI+1)])
-                            b.SetBytes(randB[16*i:16*(i+1)])
-                            
-                            aggregate.SetBytes(deltas[timeStep][16*i:16*(i+1)])
-                            aggregate.Add(&aggregate, &perma)
-                            aggregate.Sub(&aggregate, &b)
-                            copy(deltas[timeStep][16*i:16*(i+1)], aggregate.Bytes())
-                        }
+            _,err = rand.Read(bFinal[i])
+            if err != nil {
+                panic("randomness issue in share translation generation")
+            }
+            AddOrSub(bFinalSum, bFinal[i], true)
+        }
+    }
 
-                                        
-                        //sAtPermTime
-                        if timeStep != numServers-1 && timeStep != server {
-                            aggregate.SetBytes(sAtPermTime[timeStep+1][16*i:16*(i+1)])
-                            aggregate.Add(&aggregate, &b)
-                            copy(sAtPermTime[timeStep+1][16*i:16*(i+1)], aggregate.Bytes())
-                        }
-                        
-                        if timeStep != 0 && timeStep != server && timeStep != server+1 {
-                            aggregate.SetBytes(sAtPermTime[timeStep][16*i:16*(i+1)])
-                            aggregate.Sub(&aggregate, &a)
-                            copy(sAtPermTime[timeStep][16*i:16*(i+1)], aggregate.Bytes())
-                        }
-                        
-                    }
-                    blocker <- 1
-                }(startIndex, endIndex)
-            }
-            
-            for j:=0; j < numThreads; j++ {
-                <- blocker
-            }
+    //now just need to compute the very last delta
+    for i:=0; i < numServers; i++ {
+        if i == 0 {
+            temp = PermuteDB(aInitSum, intPerms[i])
+            DoubleAddOrSub(temp, deltas[i], aAtPermTime[i], true, false)
+        } else if i != numServers - 1 {
+            AddOrSub(temp, sAtPermTime[i], true)
+            temp = PermuteDB(temp, intPerms[i])
+            DoubleAddOrSub(temp, deltas[i], aAtPermTime[i], true, false)
+        } else { // i == numServers -1
+            AddOrSub(temp, sAtPermTime[i], true)
+            temp = PermuteDB(temp, intPerms[i])
+            //here we actually compute the last delta
+            DoubleAddOrSub(deltas[i], temp, bFinalSum, false, false)
         }
     }
 
     return perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas
 }
 
+/*
 func TestGenShareTrans() bool {
     
     //batchSize 10, blocks per row 5, numServers 2
@@ -563,9 +591,9 @@ func TestGenShareTrans() bool {
     
     return bytes.Equal(flatDB, zero)
 }
+*/
 
-//just used for internal testing
-func permuteDB(flatDB []byte, pi []int) []byte{
+func PermuteDB(flatDB []byte, pi []int) []byte{
     rowLen := len(flatDB)/len(pi)
 
     permutedDB := make([]byte, len(flatDB))
