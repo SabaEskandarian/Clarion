@@ -1,0 +1,15 @@
+Data for evaluation
+
+instances have 16vcpus, 64gb of memory
+
+1 out of 3 system
+Server 0: us-east1-b
+Server 1: us-central1-c
+Server -1: us-west1-b
+clients: us-east1-b (network parts not relevant to evaluation)
+
+message sizes to evaluate: 32 byte, 160 byte, 1kb
+batch sizes 10k, 100k, 200k, 300k, 400k, 500k, 600k, 700k, 800k, 900k, 1m
+average over 10 evaluations
+
+params starting at 3, 33 tests included

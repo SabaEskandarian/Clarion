@@ -6,88 +6,149 @@ import (
     "golang.org/x/crypto/nacl/box"
     "io"
     "time"
+    "crypto/rand"
+    
     "shufflemessage/mycrypto" 
 )
 
 
 //some utility functions used by the servers
 
-func leaderReceivingPhase(db [][]byte, conns []net.Conn, msgBlocks, batchSize int, ln net.Listener) {
+func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batchSize int,  pubKeys []*[32]byte) {
     //client connection receiving phase
-    //NOTE: this phase of server is currently single-threaded. 
-    //Throughput could be significantly increased by making the servers handle multiple client requests concurrently
-    numServers := len(conns)
+    numServers := len(setupConns)
     
     //48 is for mac key share, mac, encryption key, 16 bytes each
     shareLength := 48 + 16*msgBlocks
     boxedShareLength := (shareLength + box.AnonymousOverhead)
-    clientTransmissionLength := (numServers - 1) * boxedShareLength + shareLength
     //generate preliminary permutation
     prelimPerm := mycrypto.GenPerm(batchSize)
-    
     //NOTE: the preliminary permutation is effectively "for free" to evaluate because the server just copies the client messages into their permuted indices directly
     
-    //for performance measurement we'll only implement the case where all client messages are good
-    //we'll just panic later if a blind mac verification fails
-    for msgCount := 0; msgCount < batchSize; msgCount++ {
-        //handle connections from client, pass on boxes
-        
-        //client connection
-        clientConn, err := ln.Accept()
-        if err != nil {
-            log.Println(err)
-            return
-        }
-        clientConn.SetDeadline(time.Time{})
-        clientTransmission := readFromConn(clientConn, clientTransmissionLength)
-        clientConn.Close()
-        
-        //NOTE: the next steps of handling messages sent to this server and forwarding messages to other servers could definitely be done in parallel too
-        
-        //handle the message sent for this server
-        copy(db[prelimPerm[msgCount]][0:16*numServers], 
-            mycrypto.ExpandKeyShares(0, numServers, clientTransmission[0:16]))
-        copy(db[prelimPerm[msgCount]][16*numServers:], clientTransmission[16:shareLength])
-        
-        //pass on the boxes to the other servers, send the index they should be placed in too
-        for i := 1; i < numServers; i++ {
+    
+    numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
+    //numThreads = 1
+    //chunkSize = batchSize
+    blocker := make(chan int)
+    
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize
+        endIndex := (i+1)*chunkSize
+        go func(startI, endI, threadNum int) {
+            //for performance measurement we'll only implement the case where all client messages are good
+            //we'll just panic later if a blind mac verification fails
             
-            //send prelimPerm[msgCount]
-            writeToConn(conns[i], intToByte(prelimPerm[msgCount]))
+            var clientTotalTime time.Duration
             
-            //send client message
-            start := shareLength + (i-1)*boxedShareLength
-            end := shareLength + i*boxedShareLength
-            writeToConn(conns[i], clientTransmission[start:end])
-        }
+            for msgCount := startI; msgCount < endI; msgCount++ {
+                //handle connections from client, pass on boxes
+                
+                clientTransmission, clientTime := clientSim(msgCount%26, msgBlocks, pubKeys)
+                clientTotalTime += clientTime
+                
+                //handle the message sent for this server
+                copy(db[prelimPerm[msgCount]][0:16*numServers], 
+                    mycrypto.ExpandKeyShares(0, numServers, clientTransmission[0:16]))
+                copy(db[prelimPerm[msgCount]][16*numServers:], clientTransmission[16:shareLength])
+                
+                //pass on the boxes to the other servers, send the index they should be placed in too
+                for i := 1; i < numServers; i++ {
+                    
+                    //send prelimPerm[msgCount]
+                    writeToConn(setupConns[i][threadNum], intToByte(prelimPerm[msgCount]))
+                    
+                    //send client message
+                    start := shareLength + (i-1)*boxedShareLength
+                    end := shareLength + i*boxedShareLength
+                    writeToConn(setupConns[i][threadNum], clientTransmission[start:end])
+                }
+            }
+            log.Printf("Client thread %d average compute time: %s", threadNum,clientTotalTime/time.Duration(chunkSize))
+            blocker <- 1
+        }(startIndex, endIndex, i)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
     }
 }
 
-func otherReceivingPhase(db [][]byte, conn net.Conn, numServers, msgBlocks, batchSize int, myPubKey, mySecKey *[32]byte, myNum int) {
+func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte) ([]byte, time.Duration) {
+    startTime := time.Now()
+    
+    numServers := len(pubKeys)
+        
+    //generate the MACed ciphertext, MAC, and all the keys; secret share
+    //look in vendors/mycrypto/crypto.go for details
+    keyAndCt := mycrypto.MakeCT(msgBlocks, msgType)
+    mac, keyShareSeeds := mycrypto.WeirdMac(numServers, keyAndCt)
+    bodyShares := mycrypto.Share(numServers, append(mac, keyAndCt...))
+        
+    //box shares with the appropriate key share seeds prepended
+    //"box" sent to leader is actually just sent to the leader without a box
+    msgToSend := append(keyShareSeeds[0],bodyShares[0]...)
+    
+    //log.Printf("Msg length for one share: %d\n", len(msgToSend))
+    //log.Printf("encryption size overhead: %d\n", box.AnonymousOverhead)
+    
+    for i:= 1; i < numServers; i++ {
+        
+        //SealAnonymous appends its output to msgToSend
+        boxedMessage, err := box.SealAnonymous(nil, append(keyShareSeeds[i],bodyShares[i]...), pubKeys[i], rand.Reader)
+        if err != nil {
+            panic(err)
+        }
+        msgToSend = append(msgToSend, boxedMessage...)
+    }
+    
+    
+    elapsedTime := time.Since(startTime)
+    
+    return msgToSend, elapsedTime
+}
+
+func otherReceivingPhase(db [][]byte, setupConns [][]net.Conn, numServers, msgBlocks, batchSize int, myPubKey, mySecKey *[32]byte, myNum int) {
 
     //48 is for mac key share, mac, encryption key, 16 bytes each
     shareLength := 48 + 16*msgBlocks
     boxedShareLength := (shareLength + box.AnonymousOverhead)
+    numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
+    //numThreads = 1
+    //chunkSize = batchSize
     
-    //client connection receiving phase
-    for msgCount := 0; msgCount < batchSize; msgCount++ {
-        
-        //read permuted index from leader
-        prelimPermIndex := byteToInt(readFromConn(conn, 4))
-        
-        //read client box from leader, unbox
-        clientBox := readFromConn(conn, boxedShareLength)
-        
-        clientMessage, ok := box.OpenAnonymous(nil, clientBox, myPubKey, mySecKey)
-        if !ok {
-            panic("decryption not ok!!")
-        }
-        
-        //expand seeds, store in db
-        copy(db[prelimPermIndex][0:16*numServers], 
-            mycrypto.ExpandKeyShares(myNum, numServers, clientMessage[0:16]))
-        copy(db[prelimPermIndex][16*numServers:], clientMessage[16:shareLength])
+    blocker:= make(chan int)
+    
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize
+        endIndex := (i+1)*chunkSize
+        go func(startI, endI, threadIndex int) {
+            //client connection receiving phase
+            for msgCount := startI; msgCount < endI; msgCount++ {
+                
+                //read permuted index from leader
+                prelimPermIndex := byteToInt(readFromConn(setupConns[0][threadIndex], 4))
+                
+                //read client box from leader, unbox
+                clientBox := readFromConn(setupConns[0][threadIndex], boxedShareLength)
+                
+                clientMessage, ok := box.OpenAnonymous(nil, clientBox, myPubKey, mySecKey)
+                if !ok {
+                    panic("decryption not ok!!")
+                }
+                
+                //expand seeds, store in db
+                copy(db[prelimPermIndex][0:16*numServers], 
+                    mycrypto.ExpandKeyShares(myNum, numServers, clientMessage[0:16]))
+                copy(db[prelimPermIndex][16*numServers:], clientMessage[16:shareLength])
 
+            }
+            
+            blocker <- 1
+        }(startIndex, endIndex, i)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
     }
 }
 

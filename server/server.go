@@ -13,12 +13,12 @@ import (
     "strconv"
     "bufio"
     "strings"
-    
+    "runtime"
+        
     "shufflemessage/mycrypto" 
 )
 
-func main() {
-    
+func main() {    
     //for i:=0; i < 10; i++ {
     //    log.Println(mycrypto.TestGenShareTrans())
     //}
@@ -227,16 +227,45 @@ func main() {
         log.Println("performance could be improved by using a batchSize divisible by 16")
     }
     
-    for {
-        
+    setupConns := make([][]net.Conn, numServers)
+    if leader {
+        for i:=1; i < numServers; i++ {          
+            setupConns[i] = make([]net.Conn, numThreads)
+            for j:=0; j < numThreads; j++ {
+                setupConns[i][j], err = tls.Dial("tcp", addrs[i], conf)
+                if err != nil {
+                    log.Println(err)
+                    return 
+                }
+                readFromConn(setupConns[i][j], 4)
+                defer setupConns[i][j].Close()
+            }
+        }
+    } else {
+        setupConns[0] = make([]net.Conn, numThreads)
+        for j:=0; j < numThreads; j++ {
+            setupConns[0][j], err = ln.Accept()
+            if err != nil {
+                log.Println(err)
+                return
+            }
+            writeToConn(setupConns[0][j], intToByte(1))
+            setupConns[0][j].SetDeadline(time.Time{})
+        }
+    }
+    
+    for testCount:=0; testCount < 10; testCount++{
+        runtime.GC()
         log.Println("server ready")
+        //NOTE: since the purpose of this evaluation is to measure the performance once the servers have already received the messages from the client, I'm just going to have the lead server generate the client queries and pass them on to the others to save time
         //receiving client connections phase 
         if leader {
-            leaderReceivingPhase(db, conns, msgBlocks, batchSize, ln)
+            leaderReceivingPhase(db, setupConns, msgBlocks, batchSize, pubKeys)
         } else {
-            otherReceivingPhase(db, conns[0], numServers, msgBlocks, batchSize, pubKeys[serverNum], mySecKey, serverNum)
+            otherReceivingPhase(db, setupConns, numServers, msgBlocks, batchSize, pubKeys[serverNum], mySecKey, serverNum)
         }
-        
+        //runtime.GC()
+        log.Println("starting processing of message batch")
         //processing phase
         //NOTE: in reality, the blind verification and aux server stuff could be done as messages arrive
         //this would speed up the processing time, esp. if the server were multithreaded

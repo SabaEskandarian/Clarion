@@ -8,6 +8,7 @@ import (
     "golang.org/x/crypto/nacl/box"
     "strconv"
     "strings"
+    "runtime"
     
     "shufflemessage/mycrypto" 
 )
@@ -70,7 +71,8 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
     var beaverTotalTime time.Duration
     blocker := make(chan int)
     
-    for {
+    for testCount:=0; testCount < 10; testCount++{
+        runtime.GC()
         log.Println("ready")
         //leader requests triples and translations
         readFromConn(conns[0], 4)
