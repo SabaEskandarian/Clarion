@@ -67,6 +67,7 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
     
     totalBatches := 0
     var totalTime time.Duration
+    var beaverTotalTime time.Duration
     blocker := make(chan int)
     
     for {
@@ -81,13 +82,21 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
 
         beavers := mycrypto.GenBeavers(numBeavers, numServers)
         
+        //send servers their beaver stuff
+        //no need for blocking since that next steps don't depend on this and there is blocking at the end
+        for i:=0; i < numServers; i++ {
+            go func(myBeavers []byte, serverNum int) {
+                writeToConn(conns[serverNum], myBeavers)
+            }(beavers[i], i)
+        }
+        
+        beaverElapsedTime := time.Since(startTime)
+        
         perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := mycrypto.GenShareTrans(batchSize, blocksPerRow, numServers)
 
-
-        //send servers their stuff
+        //send servers their share translation stuff
         for i:= 0; i < numServers; i++ {
-            go func(myBeavers, myPerm, myAInitial, myAAtPermTime, myBFinal, mySAtPermTime, myDelta []byte,  serverNum int) {
-                writeToConn(conns[serverNum], myBeavers)
+            go func(myPerm, myAInitial, myAAtPermTime, myBFinal, mySAtPermTime, myDelta []byte,  serverNum int) {
                 writeToConn(conns[serverNum], myPerm)
                 writeToConn(conns[serverNum], myDelta)
                 
@@ -103,19 +112,19 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
                 
                 blocker <- 1
                 return
-            } (beavers[i], perms[i], aInitial[i], aAtPermTime[i], bFinal[i], sAtPermTime[i], deltas[i], i)
+            } (perms[i], aInitial[i], aAtPermTime[i], bFinal[i], sAtPermTime[i], deltas[i], i)
         }
         
         for i:=0; i < numServers; i++ {
             <- blocker
         }
         
-
-        
         elapsedTime := time.Since(startTime)
         totalTime += elapsedTime
+        beaverTotalTime += beaverElapsedTime
         totalBatches++
         log.Printf("preprocessing data prepared in %s\n", elapsedTime)
+        log.Printf("beaver generation time only: %s, average: %s\n", beaverElapsedTime, beaverTotalTime/time.Duration(totalBatches))
         log.Printf("%d batches prepared so far, average time %s\n\n", totalBatches, totalTime/time.Duration(totalBatches))
     }
 }

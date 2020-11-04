@@ -377,23 +377,43 @@ func intToByte(myInt int) (retBytes []byte){
 func GenBeavers(numBeavers, numServers int) [][]byte {
     
     triples := make([]byte, numBeavers*48)
-    var eltA, eltB, eltC modp.Element
+
     
-    //generate triples a,b,c s.t. a*b=c
-    for i:= 0; i < numBeavers; i++ {
-        
-        //generate random A, B, multiply to get C
+    numThreads, chunkSize := PickNumThreads(numBeavers)
+    blocker := make(chan int)
+    
+    for i:=0; i < numBeavers; i++ {
         start:= i*48
         
         _,err := rand.Read(triples[start:start+32])
         if err != nil {
             panic("randomness issue in beaver triple generation")
         }
+    }
+        
+    for j:=0;j<numThreads; j++ {
+        startIndex := j*chunkSize
+        endIndex := (j+1)*chunkSize
+        go func(startI, endI int) {
+            //generate triples a,b,c s.t. a*b=c
+            var eltA, eltB, eltC modp.Element
+            for i:= startI; i < endI; i++ {
+                
+                //generate random A, B, multiply to get C
+                start:= i*48
 
-        eltA.SetBytes(triples[start:start+16])
-        eltB.SetBytes(triples[start+16:start+32])
-        eltC.Mul(&eltA, &eltB)
-        copy(triples[start+32:start+48], eltC.Bytes())
+                eltA.SetBytes(triples[start:start+16])
+                eltB.SetBytes(triples[start+16:start+32])
+                eltC.Mul(&eltA, &eltB)
+                copy(triples[start+32:start+48], eltC.Bytes())
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
+        
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
     }
     
     //NOTE: could probably speed this up a little by skipping a bunch of []byte->Element->[]byte conversions and just doing the secret sharing on the Elements directly
@@ -448,23 +468,24 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
     length := batchSize*blocksPerRow*16
     
     permChan := make(chan []byte)
-    intPermChan := make(chan []int)
     newSliceChan := make(chan []byte)
-
+    indexChan := make(chan int)
+    
     for i:=0; i < numServers; i++ {
+        
+        intPerms[i] = GenPerm(batchSize)
+        
         //generate the permutations in parallel
-        go func() {
-            //generate permutation
-            perm := GenPerm(batchSize)
+        go func(index int) {
                     
             //make the byte version of perm too
             bytePerm := make([]byte, 0)
             for j := 0; j < batchSize; j++ {
-                bytePerm = append(bytePerm, intToByte(perm[j])...)
+                bytePerm = append(bytePerm, intToByte(intPerms[index][j])...)
             }
             
+            indexChan <- index
             permChan <- bytePerm
-            intPermChan <- perm
             
             //initialize stuff
             newSlice1 := make([]byte, length)
@@ -478,12 +499,12 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
             newSliceChan <- newSlice3
             newSliceChan <- newSlice4
             newSliceChan <- newSlice5
-        }()
+        }(i)
     }
     
     for i:= 0; i < numServers; i++ {
-        perms[i] = <- permChan
-        intPerms[i] = <- intPermChan
+        index := <- indexChan
+        perms[index] = <- permChan
         aInitial[i] = <- newSliceChan
         bFinal[i] = <- newSliceChan
         sAtPermTime[i] = <- newSliceChan
@@ -550,16 +571,20 @@ func GenShareTrans(batchSize, blocksPerRow, numServers int) ([][]byte, [][]byte,
     return perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas
 }
 
-/*
+
 func TestGenShareTrans() bool {
     
-    //batchSize 10, blocks per row 5, numServers 2
-    perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := GenShareTrans(10, 5, 2)
+    batchSize := 100
+    blocksPerRow := 64
+    numServers := 2
     
-    pis := make([][]int, 2)
+    //batchSize 10, blocks per row 5, numServers 2
+    perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := GenShareTrans(batchSize, blocksPerRow, numServers)
+    
+    pis := make([][]int, numServers)
     pis[0] = make([]int, 0)
     pis[1] = make([]int, 0)
-    for i:=0; i < 10; i++ {
+    for i:=0; i < batchSize; i++ {
         pis[0] = append(pis[0], byteToInt(perms[0][4*i:4*(i+1)]))
         pis[1] = append(pis[1], byteToInt(perms[1][4*i:4*(i+1)]))
 
@@ -567,12 +592,12 @@ func TestGenShareTrans() bool {
     //log.Println(pis[0])
     //log.Println(pis[1])
 
-    flatDB := make([]byte, 50*16)
+    flatDB := make([]byte, batchSize*blocksPerRow*16)
     
     //make aInitial values negative
     AddOrSub(flatDB, aInitial[1], false)
     
-    flatDB = permuteDB(flatDB, pis[0])
+    flatDB = PermuteDB(flatDB, pis[0])
     
     AddOrSub(flatDB, deltas[0], true)
     
@@ -581,17 +606,17 @@ func TestGenShareTrans() bool {
     //server 1 starts here
     AddOrSub(flatDB, sAtPermTime[1], true)
     
-    flatDB = permuteDB(flatDB, pis[1])
+    flatDB = PermuteDB(flatDB, pis[1])
         
     AddOrSub(flatDB, deltas[1], true)
     
     AddOrSub(flatDB, bFinal[0], true)
     
-    zero := make([]byte, 50*16)
+    zero := make([]byte, batchSize*blocksPerRow*16)
     
     return bytes.Equal(flatDB, zero)
 }
-*/
+
 
 func PermuteDB(flatDB []byte, pi []int) []byte{
     rowLen := len(flatDB)/len(pi)
@@ -613,34 +638,62 @@ func Hash(flatDB []byte) []byte {
     return hash[:]
 }
 
-//NOTE: could use a goroutine to check hashes in parallel
 //check hashes of many flat DBs
 func CheckHashes(hashes, dbs []byte, dbLen int) bool {
+    
+    resChan := make(chan bool)
+    res := true
+    
     for i:=0; i < len(hashes)/32; i++ {
-        hash := sha256.Sum256(dbs[dbLen*i:dbLen*(i+1)])
-        if !bytes.Equal(hashes[32*i:32*(i+1)], hash[:]) {
-            return false
-        }
+        go func(index int) {
+            hash := sha256.Sum256(dbs[dbLen*index:dbLen*(index+1)])
+            if bytes.Equal(hashes[32*index:32*(index+1)], hash[:]) {
+                resChan <- true
+            } else {
+                resChan <- false
+            }
+        }(i)
     }
-    return true
+    
+    for i:=0; i < len(hashes)/32; i++ {
+        res = res && <- resChan
+    }
+    return res
 }
 
 //check that shares sum to zero
 func CheckSharesAreZero(batchSize, numServers int, shares []byte) bool {
-    var hopefullyZero, anotherShare modp.Element
-    for i:=0; i < batchSize; i++ {
-        hopefullyZero.SetBytes(shares[16*i:16*(i+1)])
-        for j:=1; j < numServers; j++ {
-            index := j*16*batchSize + 16*i
-            anotherShare.SetBytes(shares[index:index+16])
-            hopefullyZero.Add(&anotherShare, &hopefullyZero)
-        }
-        if !hopefullyZero.IsZero() {
-            log.Println(i)
-            return false;
-        }
+    
+    numThreads, chunkSize := PickNumThreads(batchSize)
+    res := true;
+    resChan := make(chan bool)
+    
+    for t:=0; t < numThreads; t++ {
+        startIndex := t*chunkSize
+        endIndex := (t+1)*chunkSize
+        go func(startI, endI int) {
+            var hopefullyZero, anotherShare modp.Element
+            innerRes := true
+            for i:=startI; i < endI; i++ {
+                hopefullyZero.SetBytes(shares[16*i:16*(i+1)])
+                for j:=1; j < numServers; j++ {
+                    index := j*16*batchSize + 16*i
+                    anotherShare.SetBytes(shares[index:index+16])
+                    hopefullyZero.Add(&anotherShare, &hopefullyZero)
+                }
+                if !hopefullyZero.IsZero() {
+                    innerRes = false
+                }
+            }
+            resChan <- innerRes
+        }(startIndex, endIndex)
     }
-    return true;
+    
+    for i:=0; i < numThreads; i++ {
+        res = res && <- resChan
+    }
+    
+    return res;
 }
 
 func TestCheckSharesAreZero() bool {

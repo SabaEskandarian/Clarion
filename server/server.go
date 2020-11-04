@@ -19,12 +19,18 @@ import (
 
 func main() {
     
+    //for i:=0; i < 10; i++ {
+    //    log.Println(mycrypto.TestGenShareTrans())
+    //}
+    //return
+    
     numServers := 0
     msgBlocks := 0
     batchSize := 0    
     serverNum := 0
     paramFile := ""
     paramNum := 0
+    
     
     log.SetFlags(log.Lshortfile)
         
@@ -245,30 +251,34 @@ func main() {
         
         //read beaver triples and share translation stuff
         beavers := readFromConn(auxConn, numBeavers*48)
-        piBytes := readFromConn(auxConn, batchSize*4)
-        pi := make([]int, 0)
-        for i:=0; i < batchSize; i++ {
-            pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
-        }
-        delta := readFromConn(auxConn, dbSize)
         
+                    
         aInitial := make([]byte, 0)
         sAtPermTime := make([]byte, 0)
         bFinal := make([]byte, 0)
         aAtPermTime := make([]byte, 0)
+        delta := make([]byte, 0)
+        pi := make([]int, 0)
         
-        if serverNum != 0 {
-            aInitial = readFromConn(auxConn, dbSize)
-            sAtPermTime = readFromConn(auxConn, dbSize)
-        }
-        
-        if serverNum != numServers - 1 {
-            bFinal = readFromConn(auxConn, dbSize)
-            aAtPermTime = readFromConn(auxConn, dbSize)
-        }
-        
-        //if numServers > 2, timing starts here. If numServers == 2, timing starts with processing phase
+        //if numServers > 2, timing starts here, wait to receive translation stuff. If numServers == 2, timing starts with processing phase
         if numServers > 2 {
+            
+            piBytes := readFromConn(auxConn, batchSize*4)
+            for i:=0; i < batchSize; i++ {
+                pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
+            }
+            delta = readFromConn(auxConn, dbSize)
+            
+            if serverNum != 0 {
+                aInitial = readFromConn(auxConn, dbSize)
+                sAtPermTime = readFromConn(auxConn, dbSize)
+            }
+            
+            if serverNum != numServers - 1 {
+                bFinal = readFromConn(auxConn, dbSize)
+                aAtPermTime = readFromConn(auxConn, dbSize)
+            }
+            
             startTime = time.Now()
 
             //NOTE: time might appear worse than it really is since I'm not waiting on everyone receiving the preprocessing info before starting this stage, but I don't think it matters too much. I can change that if it does
@@ -302,8 +312,28 @@ func main() {
         
         
         blindMacElapsedTime := time.Since(blindMacStartTime)
-        shuffleStartTime := time.Now()
         
+        //retrieve the share translation stuff at the last minute if numServers = 2
+        if numServers == 2 {
+            
+            piBytes := readFromConn(auxConn, batchSize*4)
+            for i:=0; i < batchSize; i++ {
+                pi = append(pi, byteToInt(piBytes[4*i:4*(i+1)]))
+            }
+            delta = readFromConn(auxConn, dbSize)
+            
+            if serverNum != 0 {
+                aInitial = readFromConn(auxConn, dbSize)
+                sAtPermTime = readFromConn(auxConn, dbSize)
+            }
+            
+            if serverNum != numServers - 1 {
+                bFinal = readFromConn(auxConn, dbSize)
+                aAtPermTime = readFromConn(auxConn, dbSize)
+            }
+        }
+        
+        shuffleStartTime := time.Now()
             
         //shuffle        
         flatten(db, flatDB)
