@@ -150,6 +150,7 @@ func main() {
         }
         defer conns[i].Close()
         readFromConn(conns[i], 4)
+        writeToConn(conns[i], intToByte(1))
     }
     
     log.Println("connected to lower numbered servers")
@@ -163,6 +164,7 @@ func main() {
         }
         conns[i].SetDeadline(time.Time{})
         writeToConn(conns[i], intToByte(1))
+        readFromConn(conns[i], 4)
     }
     
     log.Println("connected to higher numbered servers")
@@ -175,6 +177,7 @@ func main() {
     }
     auxConn.SetDeadline(time.Time{})
     writeToConn(auxConn, intToByte(1))
+    readFromConn(auxConn, 4)
     
     log.Println("connected to aux server")
     
@@ -247,6 +250,7 @@ func main() {
                     return 
                 }
                 readFromConn(setupConns[i][j], 4)
+                writeToConn(setupConns[i][j], intToByte(1))
                 defer setupConns[i][j].Close()
             }
         }
@@ -259,6 +263,7 @@ func main() {
                 return
             }
             writeToConn(setupConns[0][j], intToByte(1))
+            readFromConn(setupConns[0][j], 4)
             setupConns[0][j].SetDeadline(time.Time{})
         }
     }

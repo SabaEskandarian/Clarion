@@ -7,6 +7,7 @@ import (
     "io"
     "time"
     "crypto/rand"
+    //"crypto/tls"
     
     "shufflemessage/mycrypto" 
 )
@@ -156,7 +157,8 @@ func readFromConn(conn net.Conn, bytes int) []byte {
         //log.Println(bytes)
         count += n
         if err != nil && err != io.EOF && count != bytes {
-            log.Println(n, err)
+            log.Println(n)
+            panic(err)
         }
     }
     return buffer
@@ -165,7 +167,8 @@ func readFromConn(conn net.Conn, bytes int) []byte {
 func writeToConn(conn net.Conn, msg []byte) {
     n, err := conn.Write(msg)
     if err != nil {
-        log.Println(n, err)
+        log.Println(n)
+        panic(err)
     }
 }
 

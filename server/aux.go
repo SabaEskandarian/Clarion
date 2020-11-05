@@ -59,6 +59,7 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
         }
         defer conns[i].Close()
         readFromConn(conns[i], 4)
+        writeToConn(conns[i], intToByte(1))
     }
 
     
