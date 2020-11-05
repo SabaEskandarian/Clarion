@@ -97,7 +97,7 @@ func main() {
     log.Printf("numServers %d\n", numServers)
     log.Printf("msgBlocks %d\n", msgBlocks)
     log.Printf("batchSize %d\n", batchSize)
-
+    
     err = scanner.Err()
     if err != nil {
         panic(err)
@@ -200,6 +200,15 @@ func main() {
             }
         }
     }
+    
+    log.Println("\nClient performance test")
+    var totalClientTime time.Duration
+    for i:= 0; i < 10; i++ {
+        _, clientTime:= clientSim(batchSize, msgBlocks, pubKeys)
+        totalClientTime += clientTime
+        
+    }
+    log.Printf("Client average compute time: %s\n\n", totalClientTime/time.Duration(10))
     
     //some relevant values
     //server share is longer because there needs to be space for a share of _each_ mac key share

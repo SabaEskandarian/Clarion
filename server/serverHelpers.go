@@ -37,14 +37,11 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
         go func(startI, endI, threadNum int) {
             //for performance measurement we'll only implement the case where all client messages are good
             //we'll just panic later if a blind mac verification fails
-            
-            var clientTotalTime time.Duration
-            
+                        
             for msgCount := startI; msgCount < endI; msgCount++ {
                 //handle connections from client, pass on boxes
                 
-                clientTransmission, clientTime := clientSim(msgCount%26, msgBlocks, pubKeys)
-                clientTotalTime += clientTime
+                clientTransmission, _ := clientSim(msgCount%26, msgBlocks, pubKeys)
                 
                 //handle the message sent for this server
                 copy(db[prelimPerm[msgCount]][0:16*numServers], 
@@ -63,7 +60,6 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
                     writeToConn(setupConns[i][threadNum], clientTransmission[start:end])
                 }
             }
-            log.Printf("Client thread %d average compute time: %s", threadNum,clientTotalTime/time.Duration(chunkSize))
             blocker <- 1
         }(startIndex, endIndex, i)
     }
