@@ -255,53 +255,40 @@ func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) 
     return outputDB, success
 }
 
-func receiveFromAll(myContribution []byte, conns []net.Conn, myNum int) []byte {
+func broadcastAndReceiveFromAll(msg []byte, conns []net.Conn, myNum int) []byte {    
     blocker := make(chan int)
     numServers := len(conns)
-    contentLenPerServer := len(myContribution)
+    contentLenPerServer := len(msg)
     content := make([]byte, contentLenPerServer*numServers)
-    
-    copy(content[contentLenPerServer*myNum:contentLenPerServer*(myNum+1)], myContribution[:])
-
-    //receive from everyone
-    for i := 0; i < numServers; i++ {
-        if i == myNum {
-            continue
-        }
         
-        go func(outputLocation []byte, conn net.Conn, bytesToRead int) {
+    //for servers with lower number, read then write
+    for i:=0; i < myNum; i++ {
+        go func(data, outputLocation []byte, conn net.Conn) {
+            bytesToRead := len(data)
+            copy(outputLocation, readFromConn(conn, bytesToRead))
+            writeToConn(conn, data)
+            blocker <- 1
+            return
+        }(msg, content[i*contentLenPerServer:(i+1)*contentLenPerServer], conns[i])
+    }
+    
+    //for servers with higher number, write then read
+    for i:= myNum+1; i < numServers; i++ {
+        go func(data, outputLocation []byte, conn net.Conn) {
+            bytesToRead := len(data)
+            writeToConn(conn, data)
             copy(outputLocation, readFromConn(conn, bytesToRead))
             blocker <- 1
             return
-        }(content[i*contentLenPerServer:(i+1)*contentLenPerServer], conns[i], contentLenPerServer)
+        }(msg, content[i*contentLenPerServer:(i+1)*contentLenPerServer], conns[i])
     }
+    
+    //"receive" from self
+    copy(content[contentLenPerServer*myNum:contentLenPerServer*(myNum+1)], msg[:])
     
     for i := 1; i < numServers; i++ {
         <- blocker
     }
     
     return content
-}
-
-//broadcast a message to everyone
-func broadcast(msg []byte, conns []net.Conn, myNum int) {
-    blocker := make(chan int)
-    numServers := len(conns)
-    
-    //broadcast
-    for i := 0; i < numServers; i++ {
-        if i == myNum {
-            continue
-        }
-        
-        go func(data []byte, conn net.Conn) {
-            writeToConn(conn, data)
-            blocker <- 1
-            return
-        }(msg, conns[i])
-    }
-    
-    for i := 1; i < numServers; i++ {
-        <- blocker
-    }
 }

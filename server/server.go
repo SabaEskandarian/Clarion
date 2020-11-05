@@ -335,8 +335,7 @@ func main() {
         maskedStuff, myExpandedKeyShares := mycrypto.GetMaskedStuff(batchSize, msgBlocks, numServers, myNum, beavers, db)
         
         //everyone distributes shares and then merges them
-        broadcast(maskedStuff, conns, serverNum)
-        maskedShares := receiveFromAll(maskedStuff, conns, serverNum)
+        maskedShares := broadcastAndReceiveFromAll(maskedStuff, conns, serverNum)
                 
         mergedMaskedShares := mergeFlattenedDBs(maskedShares, numServers, len(maskedStuff))
                 
@@ -344,8 +343,7 @@ func main() {
         macDiffShares := mycrypto.BeaverProduct(msgBlocks, numServers, batchSize, beavers, mergedMaskedShares, myExpandedKeyShares, db, leader)
         
         //broadcast shares and verify everything sums to 0
-        broadcast(macDiffShares, conns, serverNum)
-        finalMacDiffShares := receiveFromAll(macDiffShares, conns, serverNum)
+        finalMacDiffShares := broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)
         
         //verify the macs come out to 0
         success := mycrypto.CheckSharesAreZero(batchSize, numServers, finalMacDiffShares)
@@ -430,12 +428,10 @@ func main() {
         hash := mycrypto.Hash(flatDB)
         
         //send out hash (commitments)
-        broadcast(hash, conns, serverNum)
-        hashes := receiveFromAll(hash, conns, serverNum)
+        hashes := broadcastAndReceiveFromAll(hash, conns, serverNum)
         
         //send out full DB after getting everyone's commitment
-        broadcast(flatDB, conns, serverNum)
-        flatDBs := receiveFromAll(flatDB, conns, serverNum)
+        flatDBs := broadcastAndReceiveFromAll(flatDB, conns, serverNum)
 
         //check that the received DBs match the received hashes
         if !mycrypto.CheckHashes(hashes, flatDBs, dbSize) {
