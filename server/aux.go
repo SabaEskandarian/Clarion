@@ -71,56 +71,52 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
     var totalTime time.Duration
     var beaverTotalTime time.Duration
     blocker := make(chan int)
+    deltaBlocker := make(chan int)
+    seeds := make([][]byte, numServers)
     
     for testCount:=0; testCount < 10; testCount++{
         runtime.GC()
         log.Println("ready")
-        //leader requests triples and translations
-        readFromConn(conns[0], 4)
-        log.Println("received request")
+        
+        for i:=0; i < numServers; i++ {
+            go func(index int) {
+                seeds[index] = readFromConn(conns[index], 96)
+                blocker <- 1
+            }(i)
+        }
+        
+        for i:=0; i < numServers; i++ {
+            <- blocker
+        }
+        
+        log.Println("received requests")
             
         startTime := time.Now()
         
         //generate the preprocessed information for all the parties
 
-        beavers := mycrypto.GenBeavers(numBeavers, numServers)
+        beavers := mycrypto.GenBeavers(numBeavers, seeds)
         
         //send servers their beaver stuff
         //no need for blocking since that next steps don't depend on this and there is blocking at the end
         for i:=0; i < numServers; i++ {
             go func(myBeavers []byte, serverNum int) {
                 writeToConn(conns[serverNum], myBeavers)
+                if serverNum == numServers - 1 {
+                    deltaBlocker <- 1
+                }
             }(beavers[i], i)
         }
         
         beaverElapsedTime := time.Since(startTime)
+                
+        //get the last delta
+        delta := mycrypto.GenShareTrans(batchSize, blocksPerRow, seeds)
         
-        perms, aInitial, aAtPermTime, bFinal, sAtPermTime, deltas := mycrypto.GenShareTrans(batchSize, blocksPerRow, numServers)
-
-        //send servers their share translation stuff
-        for i:= 0; i < numServers; i++ {
-            go func(myPerm, myAInitial, myAAtPermTime, myBFinal, mySAtPermTime, myDelta []byte,  serverNum int) {
-                writeToConn(conns[serverNum], myPerm)
-                writeToConn(conns[serverNum], myDelta)
-                
-                if serverNum != 0 {
-                    writeToConn(conns[serverNum], myAInitial)
-                    writeToConn(conns[serverNum], mySAtPermTime)
-                }
-                
-                if serverNum != numServers - 1 {
-                    writeToConn(conns[serverNum], myBFinal)
-                    writeToConn(conns[serverNum], myAAtPermTime)
-                }
-                
-                blocker <- 1
-                return
-            } (perms[i], aInitial[i], aAtPermTime[i], bFinal[i], sAtPermTime[i], deltas[i], i)
-        }
-        
-        for i:=0; i < numServers; i++ {
-            <- blocker
-        }
+        //consume the delta blocker
+        <- deltaBlocker
+        //send the last server delta
+        writeToConn(conns[numServers - 1], delta)
         
         elapsedTime := time.Since(startTime)
         totalTime += elapsedTime

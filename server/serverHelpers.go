@@ -23,7 +23,14 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
     shareLength := 48 + 16*msgBlocks
     boxedShareLength := (shareLength + box.AnonymousOverhead)
     //generate preliminary permutation
-    prelimPerm := mycrypto.GenPerm(batchSize)
+    seed := make([]byte, 16)
+    _,err := rand.Read(seed)
+    if err != nil {
+        log.Println("couldn't generate seed")
+        panic(err)
+    }
+    rand.Read(seed)
+    prelimPerm := mycrypto.GenPerm(batchSize, seed)
     //NOTE: the preliminary permutation is effectively "for free" to evaluate because the server just copies the client messages into their permuted indices directly
     
     
