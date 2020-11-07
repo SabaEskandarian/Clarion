@@ -126,18 +126,31 @@ func CheckMac(msg, tag []byte, keyShareSeeds [][]byte) bool {
 //expand a seed using aes in CTR mode
 func AesPRG(msgLen int, seed []byte) []byte {
     
-    empty := make([]byte, msgLen)
-    
-    //use the key to encrypt the message
+    ct := make([]byte, msgLen)
     c, err := aes.NewCipher(seed)
     if err != nil {
         log.Println("Couldn't inititate new cipher")
         panic(err)
     }
-    ctr := cipher.NewCTR(c, empty[:16])
-    ct := make([]byte, msgLen)
-    ctr.XORKeyStream(ct, empty)
-    //ct now holds the encrypted message
+
+    //our biggest DBs will fortunately have lengths that still fit in ints
+    numThreads, chunkSize := PickNumThreads(msgLen)
+    empty := make([]byte, chunkSize)
+    blocker := make(chan int)
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize;
+        endIndex := (i+1)*chunkSize
+        go func(start, end int) {
+            iv := make([]byte, 16)
+            copy(iv[0:4], intToByte(start))
+            ctr := cipher.NewCTR(c, iv)
+            ctr.XORKeyStream(ct[start:end], empty)
+            blocker <- 1
+        }(startIndex, endIndex)
+    }
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
     
     return ct
 }
@@ -612,7 +625,26 @@ func PermuteDB(flatDB []byte, pi []int) []byte{
 
 //hash an already flattened db
 func Hash(flatDB []byte) []byte {
-    hash := sha256.Sum256(flatDB)
+    
+    numThreads, chunkSize := PickNumThreads(len(flatDB))
+    subHashes := make([]byte, numThreads*32)
+    blocker := make(chan int)
+    
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize
+        endIndex := (i+1)*chunkSize
+        go func(index, start, end int) {
+            subHash := sha256.Sum256(flatDB[start:end])
+            copy(subHashes[index*32:(index+1)*32], subHash[:])
+            blocker <- 1
+        }(i, startIndex, endIndex)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
+    
+    hash := sha256.Sum256(subHashes)
     return hash[:]
 }
 
@@ -627,7 +659,7 @@ func CheckHashes(hashes, dbs []byte, dbLen, myNum int) bool {
             continue
         }
         go func(index int) {
-            hash := sha256.Sum256(dbs[dbLen*index:dbLen*(index+1)])
+            hash := Hash(dbs[dbLen*index:dbLen*(index+1)])
             if bytes.Equal(hashes[32*index:32*(index+1)], hash[:]) {
                 resChan <- true
             } else {
@@ -695,39 +727,55 @@ func TestCheckSharesAreZero() bool {
 
 func BeaverProduct(msgBlocks, numServers, batchSize int, beaversC, mergedMaskedShares []byte, myExpandedKeyShares, db [][]byte, leader bool) []byte {
     //locally compute product shares and share of mac, subtract from share of given tag
-    macDiffShares := make([]byte, 0)
-    var maskedKey, myKeyShare, maskedMsg, myMsgShare, givenTag, temp modp.Element
-    for i:=0; i < batchSize; i++ {
-        var runningSum, beaverProductShare modp.Element
-        for j:=0; j < msgBlocks+1; j++ {
-            //do a beaver multiplication here
-            myKeyShare.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
-            myMsgIndex := numServers*16 + 16 + 16*j
-            myMsgShare.SetBytes(db[i][myMsgIndex:myMsgIndex+16])
-            keyIndex := i*16*(msgBlocks+1) + 16*j
-            msgIndex := len(mergedMaskedShares)/2 + keyIndex
-            maskedKey.SetBytes(mergedMaskedShares[keyIndex:keyIndex+16])
-            maskedMsg.SetBytes(mergedMaskedShares[msgIndex:msgIndex+16])
-             
-            if leader {
-                beaverProductShare.Mul(&maskedKey, &maskedMsg)
-            } else {
-                beaverProductShare.SetZero()
+    macDiffShares := make([]byte, 16*batchSize)
+    blocker := make(chan int)
+    numThreads, chunkSize := PickNumThreads(batchSize)
+    
+    for t:=0; t < numThreads; t++ {
+        startIndex := t*chunkSize
+        endIndex := (t+1)*chunkSize
+        go func(start, end int) {
+            for i:=start; i < end; i++ {
+                var maskedKey, myKeyShare, maskedMsg, myMsgShare, givenTag, temp modp.Element
+                var runningSum, beaverProductShare modp.Element
+                for j:=0; j < msgBlocks+1; j++ {
+                    //do a beaver multiplication here
+                    myKeyShare.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])
+                    myMsgIndex := numServers*16 + 16 + 16*j
+                    myMsgShare.SetBytes(db[i][myMsgIndex:myMsgIndex+16])
+                    keyIndex := i*16*(msgBlocks+1) + 16*j
+                    msgIndex := len(mergedMaskedShares)/2 + keyIndex
+                    maskedKey.SetBytes(mergedMaskedShares[keyIndex:keyIndex+16])
+                    maskedMsg.SetBytes(mergedMaskedShares[msgIndex:msgIndex+16])
+                    
+                    if leader {
+                        beaverProductShare.Mul(&maskedKey, &maskedMsg)
+                    } else {
+                        beaverProductShare.SetZero()
+                    }
+                    maskedKey.Mul(&maskedKey, &myMsgShare) //this now holds a product, not a masked key
+                    maskedMsg.Mul(&maskedMsg, &myKeyShare) //this now holds a product, not a masked msg
+                    beaverProductShare.Sub(&maskedKey, &beaverProductShare)
+                    beaverProductShare.Add(&beaverProductShare, &maskedMsg)
+                    beaverIndex := 16*(msgBlocks+1)*i + 16*j
+                    temp.SetBytes(beaversC[beaverIndex:beaverIndex+16])
+                    beaverProductShare.Add(&beaverProductShare, &temp)
+                    
+                    runningSum.Add(&runningSum, &beaverProductShare)
+                }
+                givenTag.SetBytes(db[i][numServers*16:numServers*16 + 16])
+                runningSum.Sub(&runningSum, &givenTag)
+                        
+                copy(macDiffShares[16*i:16*(i+1)], runningSum.Bytes())
             }
-            maskedKey.Mul(&maskedKey, &myMsgShare) //this now holds a product, not a masked key
-            maskedMsg.Mul(&maskedMsg, &myKeyShare) //this now holds a product, not a masked msg
-            beaverProductShare.Sub(&maskedKey, &beaverProductShare)
-            beaverProductShare.Add(&beaverProductShare, &maskedMsg)
-            beaverIndex := 16*(msgBlocks+1)*i + 16*j
-            temp.SetBytes(beaversC[beaverIndex:beaverIndex+16])
-            beaverProductShare.Add(&beaverProductShare, &temp)
-            
-            runningSum.Add(&runningSum, &beaverProductShare)
-        }
-        givenTag.SetBytes(db[i][numServers*16:numServers*16 + 16])
-        runningSum.Sub(&runningSum, &givenTag)
-        macDiffShares = append(macDiffShares, runningSum.Bytes()...)
+            blocker <- 1
+        }(startIndex, endIndex)
     }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
+    
     return macDiffShares
 }
 

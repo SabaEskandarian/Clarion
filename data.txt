@@ -14,6 +14,10 @@ average over 10 evaluations
 
 params starting at 3, 33 tests included
 
+
+TODO: sanity check performance
+see how much I can reduce RAM
+
 32byte
 10k
 
@@ -144,3 +148,34 @@ params starting at 3, 33 tests included
 
 
 1m
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 1000000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 4m51.635977402s
+aux.go:126: beaver generation time only: 1m48.391705475s, average: 1m48.391705475s
+aux.go:127: 1 batches prepared so far, average time 4m51.635977402s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 1000000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 257.168µs
+
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 1000000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 3m41.025354903s, average: 3m41.025354903s
+server.go:517: shuffle time: 38.159268559s, average: 38.159268559s
+server.go:518: reveal time: 1m33.05926425s, average: 1m33.05926425s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 5m54.651360809s
+server.go:521: Average time per batch: 5m54.651360809s
