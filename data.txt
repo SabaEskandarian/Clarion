@@ -4,22 +4,36 @@ instances have 16vcpus, 64gb of memory
 
 1 out of 3 system
 Server 0: us-east1-b
-Server 1: us-central1-c
-Server -1: us-west1-b
-clients: us-east1-b (network parts not relevant to evaluation)
+Server 1: us-central1-a
+Server -1: us-west2-a
 
 message sizes to evaluate: 32 byte, 160 byte, 1kb
-batch sizes 10k, 100k, 200k, 300k, 400k, 500k, 600k, 700k, 800k, 900k, 1m
+batch sizes 1k, 5k, 10k, 20k, 50k, 80k, 100k, 200k, 500k, 1m
 average over 10 evaluations
 
-params starting at 3, 33 tests included
-
-
-TODO: sanity check performance
-see how much I can reduce RAM
+params starting at 3, 30 tests included
 
 32byte
+1k
+
+
+5k
+
+
+
 10k
+
+
+
+20k
+
+
+
+50k
+
+
+
+80k
 
 
 
@@ -30,40 +44,33 @@ see how much I can reduce RAM
 200k
 
 
-
-300k
-
-
-
-400k
-
-
-
 500k
-
-
-
-600k
-
-
-
-700k
-
-
-
-800k
-
-
-
-900k
-
 
 
 1m
 
 
 160byte
+1k
+
+
+5k
+
+
+
 10k
+
+
+
+20k
+
+
+
+50k
+
+
+
+80k
 
 
 
@@ -74,77 +81,455 @@ see how much I can reduce RAM
 200k
 
 
-
-300k
-
-
-
-400k
-
-
-
 500k
-
-
-
-600k
-
-
-
-700k
-
-
-
-800k
-
-
-
-900k
-
 
 
 1m
 
 
 1kilobyte
+
+1k
+8 threads
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 160.027316ms
+aux.go:126: beaver generation time only: 118.469244ms, average: 114.500329ms
+aux.go:127: 10 batches prepared so far, average time 176.843232ms
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 1000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 420.52µs
+
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 1000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 360.962886ms, average: 387.215657ms
+server.go:517: shuffle time: 34.379567ms, average: 38.445944ms
+server.go:518: reveal time: 160.851311ms, average: 159.12512ms
+server.go:519: batches completed: 10
+server.go:520: Time for this batch: 561.362003ms
+server.go:521: Average time per batch: 588.777577ms
+
+5k
+8 threads
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 880.863555ms
+aux.go:126: beaver generation time only: 510.370622ms, average: 532.796906ms
+aux.go:127: 10 batches prepared so far, average time 916.275821ms
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 5000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 387.538µs
+
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 5000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1.061778875s, average: 1.101609303s
+server.go:517: shuffle time: 244.570992ms, average: 241.917571ms
+server.go:518: reveal time: 379.927844ms, average: 375.124998ms
+server.go:519: batches completed: 10
+server.go:520: Time for this batch: 1.693736768s
+server.go:521: Average time per batch: 1.726534876s
+
 10k
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 1.687928509s
+aux.go:126: beaver generation time only: 1.014331937s, average: 996.870951ms
+aux.go:127: 10 batches prepared so far, average time 1.651290425s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 10000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 371.603µs
 
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 10000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1.852399806s, average: 1.833786342s
+server.go:517: shuffle time: 567.925429ms, average: 563.431527ms
+server.go:518: reveal time: 655.360975ms, average: 651.499598ms
+server.go:519: batches completed: 10
+server.go:520: Time for this batch: 3.086943088s
+server.go:521: Average time per batch: 3.060908452s
+
+20k
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 3.11424234s
+aux.go:126: beaver generation time only: 1.877115606s, average: 1.931942999s
+aux.go:127: 5 batches prepared so far, average time 3.063269521s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 20000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 386.953µs
+
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 20000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 3.291763464s, average: 3.298212608s
+server.go:517: shuffle time: 1.068242475s, average: 1.014043167s
+server.go:518: reveal time: 1.294508067s, average: 1.327393786s
+server.go:519: batches completed: 5
+server.go:520: Time for this batch: 5.676537837s
+server.go:521: Average time per batch: 5.660117937s
+
+25k 
+(8 threads)
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 3.894467887s
+aux.go:126: beaver generation time only: 2.407030489s, average: 2.492760828s
+aux.go:127: 5 batches prepared so far, average time 3.93163218s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 25000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 361.553µs
+
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 25000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 4.179972109s, average: 4.232167082s
+server.go:517: shuffle time: 1.161881328s, average: 1.150806582s
+server.go:518: reveal time: 1.579345036s, average: 1.575663061s
+server.go:519: batches completed: 5
+server.go:520: Time for this batch: 6.946722923s
+server.go:521: Average time per batch: 6.985535356s
+
+50k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 50000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 7.248005542s
+aux.go:126: beaver generation time only: 4.877453804s, average: 4.877453804s
+aux.go:127: 1 batches prepared so far, average time 7.248005542s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 50000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 396.092µs
+
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 50000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 7.418704747s, average: 7.418704747s
+server.go:517: shuffle time: 2.142411405s, average: 2.142411405s
+server.go:518: reveal time: 3.27537185s, average: 3.27537185s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 12.894820294s
+server.go:521: Average time per batch: 12.894820294s
+
+75k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 75000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 11.130248844s
+aux.go:126: beaver generation time only: 7.502633154s, average: 7.502633154s
+aux.go:127: 1 batches prepared so far, average time 11.130248844s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 75000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 367.286µs
+
+server.go:240: using 8 threads
+server.go:242: performance could be improved by using a batchSize divisible by 16
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 75000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 11.113923395s, average: 11.113923395s
+server.go:517: shuffle time: 2.973816626s, average: 2.973816626s
+server.go:518: reveal time: 4.381881605s, average: 4.381881605s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 18.563465476s
+server.go:521: Average time per batch: 18.563465476s
+
+80k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 80000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 11.264324443s
+aux.go:126: beaver generation time only: 7.801123697s, average: 7.801123697s
+aux.go:127: 1 batches prepared so far, average time 11.264324443s
+
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 80000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 379.303µs
+
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 80000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 11.351756466s, average: 11.351756466s
+server.go:517: shuffle time: 3.209467095s, average: 3.209467095s
+server.go:518: reveal time: 4.831558457s, average: 4.831558457s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 19.477289398s
+server.go:521: Average time per batch: 19.477289398s
 
 100k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 100000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 18.67115878s
+aux.go:126: beaver generation time only: 9.367054631s, average: 9.367054631s
+aux.go:127: 1 batches prepared so far, average time 18.67115878s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 100000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 392.589µs
 
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 100000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 16.573997315s, average: 16.573997315s
+server.go:517: shuffle time: 4.289232948s, average: 4.289232948s
+server.go:518: reveal time: 6.18981108s, average: 6.18981108s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 27.173332824s
+server.go:521: Average time per batch: 27.173332824s
 
 200k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 200000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 29.849450895s
+aux.go:126: beaver generation time only: 18.963879223s, average: 18.963879223s
+aux.go:127: 1 batches prepared so far, average time 29.849450895s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 200000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 343.962µs
 
-
-300k
-
-
-
-400k
-
-
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 200000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 27.688379731s, average: 27.688379731s
+server.go:517: shuffle time: 8.212139522s, average: 8.212139522s
+server.go:518: reveal time: 11.919694422s, average: 11.919694422s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 48.095024205s
+server.go:521: Average time per batch: 48.095024205s
 
 500k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 500000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 1m12.041755964s
+aux.go:126: beaver generation time only: 48.723236992s, average: 48.723236992s
+aux.go:127: 1 batches prepared so far, average time 1m12.041755964s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 500000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 377.279µs
 
-
-600k
-
-
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 500000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1m8.035645682s, average: 1m8.035645682s
+server.go:517: shuffle time: 20.593887765s, average: 20.593887765s
+server.go:518: reveal time: 29.079615902s, average: 29.079615902s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 1m58.565521866s
+server.go:521: Average time per batch: 1m58.565521866s
 
 700k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 700000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 1m40.614259384s
+aux.go:126: beaver generation time only: 1m7.605684225s, average: 1m7.605684225s
+aux.go:127: 1 batches prepared so far, average time 1m40.614259384s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 700000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 387.571µs
+
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 700000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1m33.81008785s, average: 1m33.81008785s
+server.go:517: shuffle time: 29.12078229s, average: 29.12078229s
+server.go:518: reveal time: 40.310601901s, average: 40.310601901s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 2m44.329263447s
+server.go:521: Average time per batch: 2m44.329263447s
 
 
 800k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 800000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 1m53.185664405s
+aux.go:126: beaver generation time only: 1m17.610594317s, average: 1m17.610594317s
+aux.go:127: 1 batches prepared so far, average time 1m53.185664405s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 800000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 417.162µs
 
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 800000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1m46.061010584s, average: 1m46.061010584s
+server.go:517: shuffle time: 32.807925213s, average: 32.807925213s
+server.go:518: reveal time: 46.812385793s, average: 46.812385793s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 3m6.950855859s
+server.go:521: Average time per batch: 3m6.950855859s
 
 900k
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 900000
+aux.go:18: This is the auxiliary server
+aux.go:79: ready
+aux.go:92: received requests
+aux.go:125: preprocessing data prepared in 2m4.889068085s
+aux.go:126: beaver generation time only: 1m25.389655368s, average: 1m25.389655368s
+aux.go:127: 1 batches prepared so far, average time 2m4.889068085s
 
+server.go:100: numServers 2
+server.go:101: msgBlocks 64
+server.go:102: batchSize 900000
+server.go:117: This server is the leader
+server.go:159: connected to lower numbered servers
+server.go:173: connected to higher numbered servers
+server.go:185: connected to aux server
+server.go:210: 
+Client performance test
+server.go:217: Client average compute time: 393.384µs
+
+server.go:240: using 16 threads
+server.go:281: server ready
+server.go:290: starting processing of message batch
+server.go:515: 2 servers, 900000 msgs per batch, 1024 byte messages
+server.go:516: blind mac time: 1m58.4570271s, average: 1m58.4570271s
+server.go:517: shuffle time: 36.376681843s, average: 36.376681843s
+server.go:518: reveal time: 51.916968799s, average: 51.916968799s
+server.go:519: batches completed: 1
+server.go:520: Time for this batch: 3m27.896141597s
+server.go:521: Average time per batch: 3m27.896141597s
 
 
 1m
@@ -154,9 +539,9 @@ server.go:102: batchSize 1000000
 aux.go:18: This is the auxiliary server
 aux.go:79: ready
 aux.go:92: received requests
-aux.go:125: preprocessing data prepared in 4m51.635977402s
-aux.go:126: beaver generation time only: 1m48.391705475s, average: 1m48.391705475s
-aux.go:127: 1 batches prepared so far, average time 4m51.635977402s
+aux.go:125: preprocessing data prepared in 2m28.541455351s
+aux.go:126: beaver generation time only: 1m40.230549475s, average: 1m40.230549475s
+aux.go:127: 1 batches prepared so far, average time 2m28.541455351s
 
 server.go:100: numServers 2
 server.go:101: msgBlocks 64
@@ -167,15 +552,15 @@ server.go:173: connected to higher numbered servers
 server.go:185: connected to aux server
 server.go:210: 
 Client performance test
-server.go:217: Client average compute time: 257.168µs
+server.go:217: Client average compute time: 429.815µs
 
 server.go:240: using 16 threads
 server.go:281: server ready
 server.go:290: starting processing of message batch
 server.go:515: 2 servers, 1000000 msgs per batch, 1024 byte messages
-server.go:516: blind mac time: 3m41.025354903s, average: 3m41.025354903s
-server.go:517: shuffle time: 38.159268559s, average: 38.159268559s
-server.go:518: reveal time: 1m33.05926425s, average: 1m33.05926425s
+server.go:516: blind mac time: 2m22.651921572s, average: 2m22.651921572s
+server.go:517: shuffle time: 40.392495579s, average: 40.392495579s
+server.go:518: reveal time: 57.670465022s, average: 57.670465022s
 server.go:519: batches completed: 1
-server.go:520: Time for this batch: 5m54.651360809s
-server.go:521: Average time per batch: 5m54.651360809s
+server.go:520: Time for this batch: 4m2.026849101s
+server.go:521: Average time per batch: 4m2.026849101s
