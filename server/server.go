@@ -33,6 +33,7 @@ func main() {
     serverNum := 0
     paramFile := ""
     paramNum := 0
+    messagingMode := false
     
     
     log.SetFlags(log.Lshortfile)
@@ -42,6 +43,7 @@ func main() {
         log.Println("servers 0... are the shuffling servers. Start them in order.")
         log.Println("server -1 is the aux server. Start it last. ")
         log.Println("paramFile format is all the server addresses (addr:port), each value on a separate line. Then there's any number of sets of 4 lines holding 'PARAMS', numServers, blocks per msg, and batch size. [paramChoice] is a number i that picks the ith set of parameters to run the system with (i starting at 1). ")
+        log.Println("add 'messaging' as a final parameter to only have the first block of the message MACed and checked")
         return
     } else {
         serverNum, _ = strconv.Atoi(os.Args[1])
@@ -110,8 +112,16 @@ func main() {
     leader := false
     myNum := serverNum
     
+    
+    if len(os.Args) == 5 && os.Args[4] == "messaging" {
+        messagingMode = true
+        log.Println("in messaging mode; only first block is MACed/verified")
+        
+        //NOTE: this mode could be made more efficient by skipping the actual MAC machinery where the key seeds are expanded into keys
+    }
+    
     if serverNum == -1 { //aux server
-        aux(numServers, msgBlocks, batchSize, addrs)
+        aux(numServers, msgBlocks, batchSize, addrs, messagingMode)
         return
     } else if serverNum == 0 {
         log.Println("This server is the leader")
@@ -210,7 +220,7 @@ func main() {
     log.Println("\nClient performance test")
     var totalClientTime time.Duration
     for i:= 0; i < 10; i++ {
-        _, clientTime:= clientSim(batchSize, msgBlocks, pubKeys)
+        _, clientTime:= clientSim(batchSize, msgBlocks, pubKeys, messagingMode)
         totalClientTime += clientTime
         
     }
@@ -221,6 +231,11 @@ func main() {
     serverShareLength := 16*msgBlocks + 32 + numServers * 16
     blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
     numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    
+    if messagingMode {
+        numBeavers = batchSize
+    }
+    
     dbSize := blocksPerRow*batchSize*16
     
     //data structure for holding batch of messages
@@ -282,7 +297,7 @@ func main() {
         //NOTE: since the purpose of this evaluation is to measure the performance once the servers have already received the messages from the client, I'm just going to have the lead server generate the client queries and pass them on to the others to save time
         //receiving client connections phase 
         if leader {
-            leaderReceivingPhase(db, setupConns, msgBlocks, batchSize, pubKeys)
+            leaderReceivingPhase(db, setupConns, msgBlocks, batchSize, pubKeys, messagingMode)
         } else {
             otherReceivingPhase(db, setupConns, numServers, msgBlocks, batchSize, pubKeys[serverNum], mySecKey, serverNum)
         }
@@ -385,7 +400,7 @@ func main() {
         //blind mac verification
         
         //expand the key shares into the individual mac key shares, mask them and the msg shares with part of a beaver triple
-        maskedStuff, myExpandedKeyShares := mycrypto.GetMaskedStuff(batchSize, msgBlocks, numServers, myNum, beaversA, beaversB, db)
+        maskedStuff, myExpandedKeyShares := mycrypto.GetMaskedStuff(batchSize, msgBlocks, numServers, myNum, beaversA, beaversB, db, messagingMode)
         
         //everyone distributes shares and then merges them
         maskedShares := broadcastAndReceiveFromAll(maskedStuff, conns, serverNum)
@@ -397,7 +412,7 @@ func main() {
         }
         
         //everyone distributes (computed mac - provided tag) shares
-        macDiffShares := mycrypto.BeaverProduct(msgBlocks, numServers, batchSize, beaversC, mergedMaskedShares, myExpandedKeyShares, db, leader)
+        macDiffShares := mycrypto.BeaverProduct(msgBlocks, numServers, batchSize, beaversC, mergedMaskedShares, myExpandedKeyShares, db, leader, messagingMode)
         
         //broadcast shares and verify everything sums to 0
         finalMacDiffShares := broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)

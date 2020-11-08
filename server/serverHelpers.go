@@ -15,7 +15,7 @@ import (
 
 //some utility functions used by the servers
 
-func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batchSize int,  pubKeys []*[32]byte) {
+func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batchSize int,  pubKeys []*[32]byte, messagingMode bool) {
     //client connection receiving phase
     numServers := len(setupConns)
     
@@ -49,7 +49,7 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
             for msgCount := startI; msgCount < endI; msgCount++ {
                 //handle connections from client, pass on boxes
                 
-                clientTransmission, _ := clientSim(msgCount%26, msgBlocks, pubKeys)
+                clientTransmission, _ := clientSim(msgCount%26, msgBlocks, pubKeys, messagingMode)
                 
                 //handle the message sent for this server
                 copy(db[prelimPerm[msgCount]][0:16*numServers], 
@@ -77,7 +77,7 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
     }
 }
 
-func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte) ([]byte, time.Duration) {
+func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte, messagingMode bool) ([]byte, time.Duration) {
     startTime := time.Now()
     
     numServers := len(pubKeys)
@@ -85,7 +85,7 @@ func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte) ([]byte, time.Durati
     //generate the MACed ciphertext, MAC, and all the keys; secret share
     //look in vendors/mycrypto/crypto.go for details
     keyAndCt := mycrypto.MakeCT(msgBlocks, msgType)
-    mac, keyShareSeeds := mycrypto.WeirdMac(numServers, keyAndCt)
+    mac, keyShareSeeds := mycrypto.WeirdMac(numServers, keyAndCt, messagingMode)
     bodyShares := mycrypto.Share(numServers, append(mac, keyAndCt...))
         
     //box shares with the appropriate key share seeds prepended

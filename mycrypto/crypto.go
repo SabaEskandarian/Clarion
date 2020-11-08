@@ -72,7 +72,7 @@ func DecryptCT(ct []byte) []byte{
 }
 
 //outputs a mac on the msg and a key share seed for each server
-func WeirdMac(numServers int, msg []byte) ([]byte, [][]byte) {
+func WeirdMac(numServers int, msg []byte, messagingMode bool) ([]byte, [][]byte) {
         
     //generate key shares
     keyShareSeeds := make([][]byte, numServers)
@@ -85,24 +85,36 @@ func WeirdMac(numServers int, msg []byte) ([]byte, [][]byte) {
         }
     }
     
-    return ComputeMac(msg, keyShareSeeds), keyShareSeeds
+    return ComputeMac(msg, keyShareSeeds, messagingMode), keyShareSeeds
 }
 
 //compute MAC in the clear
-func ComputeMac(msg []byte, keyShareSeeds [][]byte) []byte {
+func ComputeMac(msg []byte, keyShareSeeds [][]byte, messagingMode bool) []byte {
     
     numServers := len(keyShareSeeds)
     msgLen := len(msg)
+    
+    if messagingMode {
+        msgLen = 16
+    }
+    
     msgBlocks := msgLen / 16
-    if len(msg) % 16 != 0 {
+    if msgLen % 16 != 0 {
         panic("msgLen isn't a multiple of block size. Something has gone wrong :(")
     }
     
     //expand seeds to actual key shares using AES in CTR mode as PRG
     keyShares := make([][]byte, numServers)
-    for i:= 0; i < numServers; i++ {
-        keyShares[i] = AesPRG(msgLen, keyShareSeeds[i])
+    if messagingMode {//just use the seed as the actual share
+        for i:= 0; i < numServers; i++ {
+            keyShares[i] = keyShareSeeds[i]
+        }
+    } else {
+        for i:= 0; i < numServers; i++ {
+            keyShares[i] = AesPRG(msgLen, keyShareSeeds[i])
+        }
     }
+
     
     var mac, keyPiece, msgPiece, product modp.Element
     for i:=0; i < msgBlocks; i++ {
@@ -119,8 +131,9 @@ func ComputeMac(msg []byte, keyShareSeeds [][]byte) []byte {
 }
 
 //check mac in the clear
+//won't work if messagingMode == true in the calling code
 func CheckMac(msg, tag []byte, keyShareSeeds [][]byte) bool {
-    return bytes.Equal(ComputeMac(msg, keyShareSeeds), tag)
+    return bytes.Equal(ComputeMac(msg, keyShareSeeds, false), tag)
 }
 
 //expand a seed using aes in CTR mode
@@ -648,6 +661,37 @@ func Hash(flatDB []byte) []byte {
     return hash[:]
 }
 
+//ended up not helping, so I won't use this
+//hash only through the first message block of each row
+func HashOnlyBeginning(flatDB []byte, batchSize, msgBlocks, blocksPerRow int) []byte {
+    numThreads, chunkSize := PickNumThreads(batchSize)
+    subHashes := make([]byte, numThreads*32)
+    blocker := make(chan int)
+    
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize
+        endIndex := (i+1)*chunkSize
+        go func(index, start, end int) {
+            partLen := (blocksPerRow - msgBlocks)*16
+            partsToHash := make([]byte, chunkSize*partLen)
+            for j:=0; j < chunkSize; j++ {
+                dbIndex := start*blocksPerRow*16 + j*blocksPerRow*16
+                copy(partsToHash[j*partLen:(j+1)*partLen], flatDB[dbIndex:dbIndex+partLen])
+            }
+            subHash := sha256.Sum256(partsToHash)
+            copy(subHashes[index*32:(index+1)*32], subHash[:])
+            blocker <- 1
+        }(i, startIndex, endIndex)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
+    
+    hash := sha256.Sum256(subHashes)
+    return hash[:]
+}
+
 //check hashes of many flat DBs
 func CheckHashes(hashes, dbs []byte, dbLen, myNum int) bool {
     
@@ -725,7 +769,12 @@ func TestCheckSharesAreZero() bool {
     return CheckSharesAreZero(batchSize, numServers, flatShares)
 }
 
-func BeaverProduct(msgBlocks, numServers, batchSize int, beaversC, mergedMaskedShares []byte, myExpandedKeyShares, db [][]byte, leader bool) []byte {
+func BeaverProduct(msgBlocks, numServers, batchSize int, beaversC, mergedMaskedShares []byte, myExpandedKeyShares, db [][]byte, leader, messagingMode bool) []byte {
+
+    if messagingMode {
+        msgBlocks = 0
+    }
+    
     //locally compute product shares and share of mac, subtract from share of given tag
     macDiffShares := make([]byte, 16*batchSize)
     blocker := make(chan int)
@@ -780,7 +829,12 @@ func BeaverProduct(msgBlocks, numServers, batchSize int, beaversC, mergedMaskedS
 }
 
 //get all the masked stuff together for the blind mac verification
-func GetMaskedStuff(batchSize, msgBlocks, numServers, myNum int, beaversA, beaversB []byte, db [][]byte) ([]byte, [][]byte) {
+func GetMaskedStuff(batchSize, msgBlocks, numServers, myNum int, beaversA, beaversB []byte, db [][]byte, messagingMode bool) ([]byte, [][]byte) {
+    
+    if messagingMode {
+        msgBlocks = 0
+    }
+    
     maskedExpandedKeyShares := make([]byte, 16*batchSize*(msgBlocks+1))
     maskedMsgShares := make([]byte, 16*batchSize*(msgBlocks+1))
     
@@ -795,7 +849,12 @@ func GetMaskedStuff(batchSize, msgBlocks, numServers, myNum int, beaversA, beave
         go func(startI, endI int) {
             var value, mask modp.Element
             for i:=startI; i < endI; i++ {
-                myExpandedKeyShares[i] = AesPRG((msgBlocks+1)*16, db[i][myNum*16:(myNum+1)*16])
+                if messagingMode {//just use the seed as the share
+                    myExpandedKeyShares[i] = db[i][myNum*16:(myNum+1)*16]
+                } else {
+                    myExpandedKeyShares[i] = AesPRG((msgBlocks+1)*16, db[i][myNum*16:(myNum+1)*16])
+                }
+
                 for j:=0; j < msgBlocks+1; j++ {
                     //mask the key component
                     value.SetBytes(myExpandedKeyShares[i][16*j:16*(j+1)])

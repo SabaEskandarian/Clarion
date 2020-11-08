@@ -13,7 +13,7 @@ import (
     "shufflemessage/mycrypto" 
 )
 
-func aux (numServers, msgBlocks, batchSize int, addrs []string) {
+func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bool) {
     
     log.Println("This is the auxiliary server")
     
@@ -66,6 +66,9 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string) {
     blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
         
     numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    if messagingMode {
+        numBeavers = batchSize
+    }
     
     totalBatches := 0
     var totalTime time.Duration
