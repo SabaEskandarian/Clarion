@@ -807,8 +807,9 @@ func TestCheckSharesAreZero() bool {
 
 func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte,  db [][]byte, leader, messagingMode bool) []byte {
 
+    keyBlocks := msgBlocks
     if messagingMode {
-        msgBlocks = 0
+        keyBlocks = 1
     }
     
     //locally compute product shares and share of mac, subtract from share of given tag
@@ -823,12 +824,12 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
             for i:=start; i < end; i++ {
                 var maskedKey, myKeyShare, maskedMsg, myMsgShare, givenTag, temp modp.Element
                 var runningSum, beaverProductShare modp.Element
-                for j:=0; j < msgBlocks; j++ {
+                for j:=0; j < keyBlocks; j++ {
                     //do a beaver multiplication here
                     keyShareIndex := 16*(msgBlocks+1) + 16*j
                     myKeyShare.SetBytes(db[i][keyShareIndex:keyShareIndex+16])
                     myMsgShare.SetBytes(db[i][16*j:16*(j+1)])
-                    keyIndex := i*16*msgBlocks + 16*j
+                    keyIndex := i*16*keyBlocks + 16*j
                     msgIndex := len(mergedMaskedShares)/2 + keyIndex
                     maskedKey.SetBytes(mergedMaskedShares[keyIndex:keyIndex+16])
                     maskedMsg.SetBytes(mergedMaskedShares[msgIndex:msgIndex+16])
@@ -842,7 +843,7 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
                     maskedMsg.Mul(&maskedMsg, &myKeyShare) //this now holds a product, not a masked msg
                     beaverProductShare.Sub(&maskedKey, &beaverProductShare)
                     beaverProductShare.Add(&beaverProductShare, &maskedMsg)
-                    beaverIndex := 16*msgBlocks*i + 16*j
+                    beaverIndex := 16*keyBlocks*i + 16*j
                     temp.SetBytes(beaversC[beaverIndex:beaverIndex+16])
                     beaverProductShare.Add(&beaverProductShare, &temp)
                     
@@ -867,8 +868,9 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
 //get all the masked stuff together for the blind mac verification
 func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, db [][]byte, messagingMode bool) []byte {
     
+    keyBlocks := msgBlocks
     if messagingMode {
-        msgBlocks = 0
+        keyBlocks = 1
     }
     
     maskedExpandedKeyShares := make([]byte, 16*batchSize*msgBlocks)
@@ -883,15 +885,14 @@ func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, 
         go func(startI, endI int) {
             var value, mask modp.Element
             for i:=startI; i < endI; i++ {
-
-                for j:=0; j < msgBlocks; j++ {
+                for j:=0; j < keyBlocks; j++ {
                     //mask the key component
                     keyShareIndex := 16*(msgBlocks+1) + 16*j
                     value.SetBytes(db[i][keyShareIndex:keyShareIndex + 16])
-                    beaverIndex := 16*msgBlocks*i + 16*j
+                    beaverIndex := 16*keyBlocks*i + 16*j
                     mask.SetBytes(beaversA[beaverIndex:beaverIndex+16])
                     value.Sub(&value, &mask)
-                    index := 16*msgBlocks*i + 16*j
+                    index := 16*keyBlocks*i + 16*j
                     copy(maskedExpandedKeyShares[index:index+16], value.Bytes())
                     
                     //mask the message component

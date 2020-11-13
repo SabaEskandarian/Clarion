@@ -9,11 +9,14 @@ import (
     "strconv"
     "strings"
     "runtime"
+    "fmt"
     
     "shufflemessage/mycrypto" 
 )
 
-func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bool) {
+func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string, messagingModeParams []bool) {
+    
+    numParams := len(msgBlocksParams)
     
     log.Println("This is the auxiliary server")
     
@@ -61,95 +64,119 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bo
         readFromConn(conns[i], 4)
         writeToConn(conns[i], intToByte(1))
     }
-
     
-    blocksPerRow :=  2*msgBlocks + 1
+    
+    for evalNum := 0; evalNum < numParams; evalNum++ {
+        messagingMode := messagingModeParams[evalNum]
+        msgBlocks := msgBlocksParams[evalNum]
+        batchSize := batchSizeParams[evalNum]
         
-    numBeavers := batchSize * msgBlocks
-    if messagingMode {
-        numBeavers = batchSize
-    }
-    
-    totalBatches := 0
-    var totalTime time.Duration
-    var beaverTotalTime time.Duration
-    blocker := make(chan int)
-    deltaBlocker := make(chan int)
-    seeds := make([][]byte, numServers)
-    
-    for testCount:=0; testCount < 5; testCount++{
-        runtime.GC()
-        log.Println("ready")
+        log.Printf("numServers %d\n", numServers)
+        log.Printf("msgBlocks %d\n", msgBlocks)
+        log.Printf("batchSize %d\n", batchSize)
         
-        for i:=0; i < numServers; i++ {
-            go func(index int) {
-                seeds[index] = readFromConn(conns[index], 128)
-                blocker <- 1
-            }(i)
+        if messagingMode {
+            log.Println("in messaging mode; only first block is MACed/verified")
         }
         
-        for i:=0; i < numServers; i++ {
-            <- blocker
+     
+        blocksPerRow :=  2*msgBlocks + 1
+        numBeavers := batchSize * msgBlocks
+        if messagingMode {
+            blocksPerRow = msgBlocks + 2
+            numBeavers = batchSize
         }
         
-        log.Println("received requests")
+        totalBatches := 0
+        var totalTime time.Duration
+        var beaverTotalTime time.Duration
+        blocker := make(chan int)
+        deltaBlocker := make(chan int)
+        seeds := make([][]byte, numServers)
+        
+        for testCount:=0; testCount < 5; testCount++{
+            runtime.GC()
+            log.Println("ready")
             
-        startTime := time.Now()
-        
-        //generate the preprocessed information for all the parties
-
-        beavers := mycrypto.GenBeavers(numBeavers, 48, seeds)
-        
-        //send servers their beaver stuff
-        for i:=0; i < numServers; i++ {
-            go func(myBeavers []byte, serverNum int) {
-                writeToConn(conns[serverNum], myBeavers)
-                if serverNum == numServers - 1 {
-                    deltaBlocker <- 1
-                }
-                blocker <- 1
-            }(beavers[i], i)
-        }
-        
-        beaverElapsedTime := time.Since(startTime)
+            for i:=0; i < numServers; i++ {
+                go func(index int) {
+                    seeds[index] = readFromConn(conns[index], 128)
+                    blocker <- 1
+                }(i)
+            }
+            
+            for i:=0; i < numServers; i++ {
+                <- blocker
+            }
+            
+            log.Println("received requests")
                 
-        //get the last delta
-        delta := mycrypto.GenShareTrans(batchSize, blocksPerRow, seeds)
-        
-        //consume the delta blocker
-        <- deltaBlocker
-        //send the last server delta
-        go func(){
-            writeToConn(conns[numServers - 1], delta)
-            deltaBlocker <- 1
-        }()
-        
-        //second round of beaver triples
-        beaversTwo := mycrypto.GenBeavers(numBeavers, 96, seeds)
-        
-        //make sure the previous messages are all sent
-        for i:=0; i < numServers; i++ {
-            <- blocker
+            startTime := time.Now()
+            
+            //generate the preprocessed information for all the parties
+
+            beavers := mycrypto.GenBeavers(numBeavers, 48, seeds)
+            
+            //send servers their beaver stuff
+            for i:=0; i < numServers; i++ {
+                go func(myBeavers []byte, serverNum int) {
+                    writeToConn(conns[serverNum], myBeavers)
+                    if serverNum == numServers - 1 {
+                        deltaBlocker <- 1
+                    }
+                    blocker <- 1
+                }(beavers[i], i)
+            }
+            
+            beaverElapsedTime := time.Since(startTime)
+                    
+            //get the last delta
+            delta := mycrypto.GenShareTrans(batchSize, blocksPerRow, seeds)
+            
+            //consume the delta blocker
+            <- deltaBlocker
+            //send the last server delta
+            go func(){
+                writeToConn(conns[numServers - 1], delta)
+                deltaBlocker <- 1
+            }()
+            
+            //second round of beaver triples
+            beaversTwo := mycrypto.GenBeavers(numBeavers, 96, seeds)
+            
+            //make sure the previous messages are all sent
+            for i:=0; i < numServers; i++ {
+                <- blocker
+            }
+            <- deltaBlocker
+            
+            //send beaver stuff
+            for i:=0; i < numServers; i++ {
+                go func(myBeavers []byte, serverNum int) {
+                    writeToConn(conns[serverNum], myBeavers)
+                    blocker <- 1
+                }(beaversTwo[i], i)
+            }
+            for i:=0; i < numServers; i++ {
+                <- blocker
+            }
+            
+            elapsedTime := time.Since(startTime)
+            totalTime += elapsedTime
+            beaverTotalTime += beaverElapsedTime
+            totalBatches++
+            
+            if testCount == 4 {
+                fmt.Printf("%d servers, %d msgs per batch, %d byte messages\n", numServers, batchSize, msgBlocks*16)
+                if messagingMode {
+                    fmt.Printf("Messaging mode\n")
+                }
+                fmt.Printf("preprocessing data prepared in %s\n", elapsedTime)
+                fmt.Printf("first beaver generation time only: %s, average: %s\n", beaverElapsedTime, beaverTotalTime/time.Duration(totalBatches))
+                fmt.Printf("%d batches prepared, average time %s\n\n", totalBatches, totalTime/time.Duration(totalBatches))
+                
+                log.Printf("%d batches prepared, average time %s\n\n", totalBatches, totalTime/time.Duration(totalBatches))
+            }
         }
-        <- deltaBlocker
-        
-        //send beaver stuff
-        for i:=0; i < numServers; i++ {
-            go func(myBeavers []byte, serverNum int) {
-                writeToConn(conns[serverNum], myBeavers)
-                blocker <- 1
-            }(beaversTwo[i], i)
-        }
-        for i:=0; i < numServers; i++ {
-            <- blocker
-        }
-        
-        elapsedTime := time.Since(startTime)
-        totalTime += elapsedTime
-        beaverTotalTime += beaverElapsedTime
-        totalBatches++
-        log.Printf("preprocessing data prepared in %s\n", elapsedTime)
-        log.Printf("beaver generation time only: %s, average: %s\n", beaverElapsedTime, beaverTotalTime/time.Duration(totalBatches))
-        log.Printf("%d batches prepared so far, average time %s\n\n", totalBatches, totalTime/time.Duration(totalBatches))
     }
 }
