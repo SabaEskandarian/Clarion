@@ -227,10 +227,8 @@ func main() {
     log.Printf("Client average compute time: %s\n\n", totalClientTime/time.Duration(10))
     
     //some relevant values
-    //server share is longer because there needs to be space for a share of _each_ mac key share
-    serverShareLength := 16*msgBlocks + 32 + numServers * 16
-    blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
-    numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    blocksPerRow :=  2*msgBlocks + 1 
+    numBeavers := batchSize * msgBlocks 
     
     if messagingMode {
         numBeavers = batchSize
@@ -239,10 +237,10 @@ func main() {
     dbSize := blocksPerRow*batchSize*16
     
     //data structure for holding batch of messages
-    //each entry will be of length serverShareLength
+    //each entry will be of length blocksPerRow*16
     db := make([][]byte, batchSize)
     for i:= 0; i < batchSize; i++ {
-        db[i] = make([]byte, serverShareLength)
+        db[i] = make([]byte, blocksPerRow*16)
     }
     flatDB := make([]byte, dbSize)
 
@@ -250,7 +248,7 @@ func main() {
     batchesCompleted := 0
     var totalTime, totalBlindMacTime, totalShuffleTime, totalRevealTime time.Duration
     
-    numThreads, _ := mycrypto.PickNumThreads(batchSize)
+    numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
 
     log.Printf("using %d threads", numThreads)
     if numThreads != 16 {
@@ -287,11 +285,16 @@ func main() {
     }
     
     beaverBlocker := make(chan int, 2)
+    beaverBlockerTwo := make(chan int, 2)
     beaverCBlocker := make(chan int)
+    beaverCBlockerTwo := make(chan int)
     blocker := make(chan int, 5)
     deltaBlocker := make(chan int)
+    expansionBlocker := make(chan int)
+    hashBlocker := make(chan int)
+    unflattenBlocker := make(chan int)
     
-    for testCount:=0; testCount < 10; testCount++{
+    for testCount:=0; testCount < 5; testCount++{
         runtime.GC()
         log.Println("server ready")
         //NOTE: since the purpose of this evaluation is to measure the performance once the servers have already received the messages from the client, I'm just going to have the lead server generate the client queries and pass them on to the others to save time
@@ -306,9 +309,7 @@ func main() {
         //processing phase
         //NOTE: in reality, the blind verification and aux server stuff could be done as messages arrive
         //this would speed up the processing time, esp. if the server were multithreaded
-        //but I'm handling everything for a batch at once so I can report performance for processing a batch
-        startTime := time.Now()
-        
+        //but I'm handling everything for a batch at once so I can report performance for processing a batch        
                     
         aInitial := make([]byte, 0) //not important for first server
         bFinal := make([]byte, 0) //not important for last server
@@ -318,21 +319,32 @@ func main() {
         beaversA := make([]byte, 0)
         beaversB := make([]byte, 0)
         beaversC := make([]byte, 0)
+        beaversATwo := make([]byte, 0)
+        beaversBTwo := make([]byte, 0)
+        beaversCTwo := make([]byte, 0)
         
-        //pick seeds for aInitial, bFinal, aAtPermTime, and beaver shares a, b
-        seeds := make([]byte, 96)
-        for i:=0; i < 6; i++ {
-                _,err := rand.Read(seeds[i*16:(i+1)*16])
-            if err != nil {
-                log.Println("couldn't generate seed")
-                panic(err)
-            }
+        
+        startTime := time.Now()
+        
+        //pick seeds for aInitial, bFinal, aAtPermTime, pi, and beaver shares a, b (for both sets of verifications)
+        seeds := make([]byte, 128)
+        _,err := rand.Read(seeds[:])
+        if err != nil {
+            log.Println("couldn't generate seed")
+            panic(err)
         }
-        
+                
         //send the seeds to aux server
         go func () {
             writeToConn(auxConn, seeds)
             blocker <- 1
+        }()
+        //seed expansion
+        go func() {
+            if !messagingMode {
+                expandDB(db, msgBlocks)
+            }
+            expansionBlocker <- 1
         }()
         //generate the shares for which seeds were sent to the aux server
         go func() {
@@ -365,6 +377,14 @@ func main() {
             }
             blocker <- 1
         }()
+        go func() {
+                beaversATwo = mycrypto.AesPRG(16*numBeavers, seeds[96:112])
+                beaverBlockerTwo <- 1
+        }()
+        go func() {
+                beaversBTwo = mycrypto.AesPRG(16*numBeavers, seeds[112:128])
+                beaverBlockerTwo <- 1
+        }()
 
         go func() {
             //read beaver triples and share translation stuff
@@ -374,12 +394,17 @@ func main() {
                 delta = readFromConn(auxConn, dbSize)
                 deltaBlocker <- 1
             }
+            beaversCTwo = readFromConn(auxConn, numBeavers*16)
+            beaverCBlockerTwo <- 1
         }()
         
         //make sure all the beaver triple a/b parts are here before proceeding
         for i:=0; i < 2; i++ {
             <- beaverBlocker
         }
+        
+        //make sure seed expansion is done
+        <- expansionBlocker
 
         //if numServers > 2, timing starts here, wait to have all aux stuff. If numServers == 2, timing starts earlier with processing phase
         if numServers > 2 {
@@ -390,6 +415,10 @@ func main() {
             if serverNum == numServers - 1 {
                 <- deltaBlocker
             }
+            for i:=0; i < 2; i++ {
+                <- beaverBlockerTwo
+            }
+            <- beaverCBlockerTwo
             
             startTime = time.Now()
 
@@ -400,7 +429,7 @@ func main() {
         //blind mac verification
         
         //expand the key shares into the individual mac key shares, mask them and the msg shares with part of a beaver triple
-        maskedStuff, myExpandedKeyShares := mycrypto.GetMaskedStuff(batchSize, msgBlocks, numServers, myNum, beaversA, beaversB, db, messagingMode)
+        maskedStuff := mycrypto.GetMaskedStuff(batchSize, msgBlocks, myNum, beaversA, beaversB, db, messagingMode)
         
         //everyone distributes shares and then merges them
         maskedShares := broadcastAndReceiveFromAll(maskedStuff, conns, serverNum)
@@ -412,7 +441,7 @@ func main() {
         }
         
         //everyone distributes (computed mac - provided tag) shares
-        macDiffShares := mycrypto.BeaverProduct(msgBlocks, numServers, batchSize, beaversC, mergedMaskedShares, myExpandedKeyShares, db, leader, messagingMode)
+        macDiffShares := mycrypto.BeaverProduct(msgBlocks, batchSize, beaversC, mergedMaskedShares, db, leader, messagingMode)
         
         //broadcast shares and verify everything sums to 0
         finalMacDiffShares := broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)
@@ -483,13 +512,74 @@ func main() {
         }
         
         shuffleElapsedTime := time.Since(shuffleStartTime)
+        
+        
+        //second blind mac verification
+        
+        //unflatten DB
+        for i:=0; i < numThreads; i++ {
+            startI := i*chunkSize
+            endI := (i+1)*chunkSize
+            go func(startIndex, endIndex int) {
+                for j:=startIndex; j < endIndex; j++ {
+                    db[j] = flatDB[j*blocksPerRow*16:(j+1)*blocksPerRow*16]
+                }
+                unflattenBlocker <- 1
+            }(startI, endI)
+        }
+            
+        
+        //start the hash of the final DB here in the background
+        hash := make([]byte, 0)
+        go func() {
+            //hash the whole db
+            hash = mycrypto.Hash(flatDB)
+            hashBlocker <- 1
+        }()
+        
+
+        
+        if numServers == 2 {
+            for i:=0; i < 2; i++ {
+                <- beaverBlockerTwo
+            }
+        }
+        
+        for i:=0; i < numThreads; i++ {
+            <-unflattenBlocker
+        }
+        
+        //expand the key shares into the individual mac key shares, mask them and the msg shares with part of a beaver triple
+        maskedStuff = mycrypto.GetMaskedStuff(batchSize, msgBlocks, myNum, beaversATwo, beaversBTwo, db, messagingMode)
+        
+        //everyone distributes shares and then merges them
+        maskedShares = broadcastAndReceiveFromAll(maskedStuff, conns, serverNum)
+                
+        mergedMaskedShares = mergeFlattenedDBs(maskedShares, numServers, len(maskedStuff))
+        
+        if numServers == 2 {
+            <- beaverCBlockerTwo
+        }
+        
+        //everyone distributes (computed mac - provided tag) shares
+        macDiffShares = mycrypto.BeaverProduct(msgBlocks, batchSize, beaversCTwo, mergedMaskedShares, db, leader, messagingMode)
+        
+        //broadcast shares and verify everything sums to 0
+        finalMacDiffShares = broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)
+        
+        //verify the macs come out to 0
+        success = mycrypto.CheckSharesAreZero(batchSize, numServers, finalMacDiffShares)
+        if !success {
+            panic("blind mac verification failed")
+        }
+        
         revealTimeStart := time.Now()
         
         
         //commit, reveal, mac verify, decrypt
         
-        //hash the whole db
-        hash := mycrypto.Hash(flatDB)
+        //make sure we're done hashing the DB
+        <- hashBlocker
         
         //send out hash (commitments)
         hashes := broadcastAndReceiveFromAll(hash, conns, serverNum)

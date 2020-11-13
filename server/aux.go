@@ -63,9 +63,9 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bo
     }
 
     
-    blocksPerRow :=  msgBlocks + numServers + 2 //2 is for the mac and enc key, numServers for the mac key shares
+    blocksPerRow :=  2*msgBlocks + 1
         
-    numBeavers := batchSize * (msgBlocks + 1) // +1 is for the encryption key which is included in the mac
+    numBeavers := batchSize * msgBlocks
     if messagingMode {
         numBeavers = batchSize
     }
@@ -77,13 +77,13 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bo
     deltaBlocker := make(chan int)
     seeds := make([][]byte, numServers)
     
-    for testCount:=0; testCount < 10; testCount++{
+    for testCount:=0; testCount < 5; testCount++{
         runtime.GC()
         log.Println("ready")
         
         for i:=0; i < numServers; i++ {
             go func(index int) {
-                seeds[index] = readFromConn(conns[index], 96)
+                seeds[index] = readFromConn(conns[index], 128)
                 blocker <- 1
             }(i)
         }
@@ -98,16 +98,16 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bo
         
         //generate the preprocessed information for all the parties
 
-        beavers := mycrypto.GenBeavers(numBeavers, seeds)
+        beavers := mycrypto.GenBeavers(numBeavers, 48, seeds)
         
         //send servers their beaver stuff
-        //no need for blocking since that next steps don't depend on this and there is blocking at the end
         for i:=0; i < numServers; i++ {
             go func(myBeavers []byte, serverNum int) {
                 writeToConn(conns[serverNum], myBeavers)
                 if serverNum == numServers - 1 {
                     deltaBlocker <- 1
                 }
+                blocker <- 1
             }(beavers[i], i)
         }
         
@@ -119,7 +119,30 @@ func aux (numServers, msgBlocks, batchSize int, addrs []string, messagingMode bo
         //consume the delta blocker
         <- deltaBlocker
         //send the last server delta
-        writeToConn(conns[numServers - 1], delta)
+        go func(){
+            writeToConn(conns[numServers - 1], delta)
+            deltaBlocker <- 1
+        }()
+        
+        //second round of beaver triples
+        beaversTwo := mycrypto.GenBeavers(numBeavers, 96, seeds)
+        
+        //make sure the previous messages are all sent
+        for i:=0; i < numServers; i++ {
+            <- blocker
+        }
+        <- deltaBlocker
+        
+        //send beaver stuff
+        for i:=0; i < numServers; i++ {
+            go func(myBeavers []byte, serverNum int) {
+                writeToConn(conns[serverNum], myBeavers)
+                blocker <- 1
+            }(beaversTwo[i], i)
+        }
+        for i:=0; i < numServers; i++ {
+            <- blocker
+        }
         
         elapsedTime := time.Since(startTime)
         totalTime += elapsedTime

@@ -19,8 +19,8 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
     //client connection receiving phase
     numServers := len(setupConns)
     
-    //48 is for mac key share, mac, encryption key, 16 bytes each
-    shareLength := 48 + 16*msgBlocks
+    //32 is for mac key share and mac, 16 bytes each
+    shareLength := 32 + 16*msgBlocks
     boxedShareLength := (shareLength + box.AnonymousOverhead)
     //generate preliminary permutation
     seed := make([]byte, 16)
@@ -52,9 +52,7 @@ func leaderReceivingPhase(db [][]byte, setupConns [][]net.Conn, msgBlocks, batch
                 clientTransmission, _ := clientSim(msgCount%26, msgBlocks, pubKeys, messagingMode)
                 
                 //handle the message sent for this server
-                copy(db[prelimPerm[msgCount]][0:16*numServers], 
-                    mycrypto.ExpandKeyShares(0, numServers, clientTransmission[0:16]))
-                copy(db[prelimPerm[msgCount]][16*numServers:], clientTransmission[16:shareLength])
+                copy(db[prelimPerm[msgCount]][0:shareLength], clientTransmission[0:shareLength])
                 
                 //pass on the boxes to the other servers, send the index they should be placed in too
                 for i := 1; i < numServers; i++ {
@@ -84,13 +82,13 @@ func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte, messagingMode bool) 
         
     //generate the MACed ciphertext, MAC, and all the keys; secret share
     //look in vendors/mycrypto/crypto.go for details
-    keyAndCt := mycrypto.MakeCT(msgBlocks, msgType)
-    mac, keyShareSeeds := mycrypto.WeirdMac(numServers, keyAndCt, messagingMode)
-    bodyShares := mycrypto.Share(numServers, append(mac, keyAndCt...))
+    msg := mycrypto.MakeMsg(msgBlocks, msgType)
+    mac, keySeeds := mycrypto.WeirdMac(numServers, msg, messagingMode)
+    bodyShares := mycrypto.Share(numServers, append(msg, mac...))
         
     //box shares with the appropriate key share seeds prepended
     //"box" sent to leader is actually just sent to the leader without a box
-    msgToSend := append(keyShareSeeds[0],bodyShares[0]...)
+    msgToSend := append(bodyShares[0], keySeeds[0]...)
     
     //log.Printf("Msg length for one share: %d\n", len(msgToSend))
     //log.Printf("encryption size overhead: %d\n", box.AnonymousOverhead)
@@ -98,7 +96,7 @@ func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte, messagingMode bool) 
     for i:= 1; i < numServers; i++ {
         
         //SealAnonymous appends its output to msgToSend
-        boxedMessage, err := box.SealAnonymous(nil, append(keyShareSeeds[i],bodyShares[i]...), pubKeys[i], rand.Reader)
+        boxedMessage, err := box.SealAnonymous(nil, append(bodyShares[i], keySeeds[i]...), pubKeys[i], rand.Reader)
         if err != nil {
             panic(err)
         }
@@ -114,7 +112,7 @@ func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte, messagingMode bool) 
 func otherReceivingPhase(db [][]byte, setupConns [][]net.Conn, numServers, msgBlocks, batchSize int, myPubKey, mySecKey *[32]byte, myNum int) {
 
     //48 is for mac key share, mac, encryption key, 16 bytes each
-    shareLength := 48 + 16*msgBlocks
+    shareLength := 32 + 16*msgBlocks
     boxedShareLength := (shareLength + box.AnonymousOverhead)
     numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
     //numThreads = 1
@@ -140,15 +138,34 @@ func otherReceivingPhase(db [][]byte, setupConns [][]net.Conn, numServers, msgBl
                     panic("decryption not ok!!")
                 }
                 
-                //expand seeds, store in db
-                copy(db[prelimPermIndex][0:16*numServers], 
-                    mycrypto.ExpandKeyShares(myNum, numServers, clientMessage[0:16]))
-                copy(db[prelimPermIndex][16*numServers:], clientMessage[16:shareLength])
-
+                //store in db
+                copy(db[prelimPermIndex][0:shareLength], clientMessage[:])
             }
             
             blocker <- 1
         }(startIndex, endIndex, i)
+    }
+    
+    for i:=0; i < numThreads; i++ {
+        <- blocker
+    }
+}
+
+func expandDB(db [][]byte, msgBlocks int) {
+    blocker := make(chan int)
+    batchSize := len(db)
+    numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
+    
+    for i:=0; i < numThreads; i++ {
+        startIndex := i*chunkSize;
+        endIndex := (i+1)*chunkSize
+        go func(startI, endI int) {
+            for j:=startI; j < endI; j++ {
+                copy(db[j][(msgBlocks+1)*16:], 
+                     mycrypto.AesPRG(msgBlocks*16, db[j][(msgBlocks+1)*16:(msgBlocks+2)*16]))
+            }
+            blocker <- 1
+        }(startIndex, endIndex)
     }
     
     for i:=0; i < numThreads; i++ {
@@ -228,7 +245,7 @@ func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {
 //and decrypt the messages
 func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) ([][]byte, bool) {
     outputDB := make([][]byte, batchSize)
-    rowLen := msgBlocks*16 + 32 + numServers*16
+    rowLen := msgBlocks*32 + 16
     success := true
     
     numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
@@ -238,18 +255,16 @@ func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) 
         startIndex := t*chunkSize
         endIndex := (t+1)*chunkSize
         go func(startI, endI int) {
-            keyShares := make([][]byte, numServers)
             for i:=startI; i < endI; i++ {
                 row := mergedDB[rowLen*i:rowLen*(i+1)]
-                for j:=0; j < numServers; j++ {
-                    keyShares[j] = row[16*j:16*(j+1)]
-                }
-                tag := row[numServers*16:numServers*16+16]
-                msg := row[numServers*16+16:]
-                if !mycrypto.CheckMac(msg, tag, keyShares) {
+                msg := row[:msgBlocks*16]
+                tag := row[msgBlocks*16:(msgBlocks+1)*16]
+                keys := row[(msgBlocks+1)*16:]
+
+                if !mycrypto.CheckMac(msg, tag, keys) {
                     success = false
                 }
-                outputDB[i] = mycrypto.DecryptCT(msg)
+                outputDB[i] = msg
             }
             blocker <- 1
         }(startIndex, endIndex)
