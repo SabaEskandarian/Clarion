@@ -1,0 +1,106 @@
+Testing on a 16vcpu, 64gb instance
+us-east4-c
+
+waiting for everyone...
+shuffling 10048 messages
+ecryption time: 0
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 0
+proof is done! In 1
+verification is done! In 0
+Shuffle + prove + verify = 1
+everything passed!
+stress test is done in 1 seconds
+
+waiting for everyone...
+shuffling 20032 messages
+ecryption time: 0
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 1
+proof is done! In 1
+verification is done! In 0
+Shuffle + prove + verify = 2
+everything passed!
+stress test is done in 2 seconds
+
+waiting for everyone...
+shuffling 50048 messages
+ecryption time: 0
+parsing input
+done parsing. 1
+shuffle begins!
+shuffle is done! In 1
+proof is done! In 2
+verification is done! In 1
+Shuffle + prove + verify = 4
+everything passed!
+stress test is done in 5 seconds
+
+waiting for everyone...
+shuffling 80000 messages
+ecryption time: 0
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 2
+proof is done! In 4
+verification is done! In 2
+Shuffle + prove + verify = 8
+everything passed!
+stress test is done in 8 seconds
+
+waiting for everyone...
+shuffling 100032 messages
+ecryption time: 1
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 2
+proof is done! In 4
+verification is done! In 3
+Shuffle + prove + verify = 9
+everything passed!
+stress test is done in 10 seconds
+
+waiting for everyone...
+shuffling 200000 messages
+ecryption time: 1
+parsing input
+done parsing. 1
+shuffle begins!
+shuffle is done! In 4
+proof is done! In 10
+verification is done! In 5
+Shuffle + prove + verify = 19
+everything passed!
+stress test is done in 21 seconds
+
+waiting for everyone...
+shuffling 500032 messages
+ecryption time: 4
+parsing input
+done parsing. 1
+shuffle begins!
+shuffle is done! In 9
+proof is done! In 29
+verification is done! In 15
+Shuffle + prove + verify = 53
+everything passed!
+stress test is done in 59 seconds
+
+waiting for everyone...
+shuffling 1000000 messages
+ecryption time: 9
+parsing input
+done parsing. 1
+shuffle begins!
+shuffle is done! In 20
+proof is done! In 65
+verification is done! In 31
+Shuffle + prove + verify = 116
+everything passed!
+stress test is done in 126 seconds

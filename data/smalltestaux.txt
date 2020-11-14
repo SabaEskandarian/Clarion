@@ -1,0 +1,220 @@
+2 servers, 1000 msgs per batch, 32 byte messages
+preprocessing data prepared in 29.409115ms
+first beaver generation time only: 7.417211ms, average: 6.7794ms
+5 batches prepared, average time 43.06829ms
+
+2 servers, 5000 msgs per batch, 32 byte messages
+preprocessing data prepared in 121.71895ms
+first beaver generation time only: 30.748691ms, average: 28.600019ms
+5 batches prepared, average time 141.083574ms
+
+2 servers, 10000 msgs per batch, 32 byte messages
+preprocessing data prepared in 235.899068ms
+first beaver generation time only: 59.495819ms, average: 59.853467ms
+5 batches prepared, average time 251.239817ms
+
+2 servers, 20000 msgs per batch, 32 byte messages
+preprocessing data prepared in 470.37892ms
+first beaver generation time only: 121.327302ms, average: 116.948411ms
+5 batches prepared, average time 462.336093ms
+
+2 servers, 50000 msgs per batch, 32 byte messages
+preprocessing data prepared in 1.07798774s
+first beaver generation time only: 275.181802ms, average: 281.957064ms
+5 batches prepared, average time 1.119858812s
+
+2 servers, 80000 msgs per batch, 32 byte messages
+preprocessing data prepared in 1.711716578s
+first beaver generation time only: 427.351352ms, average: 437.328097ms
+5 batches prepared, average time 1.711780127s
+
+2 servers, 100000 msgs per batch, 32 byte messages
+preprocessing data prepared in 2.126323443s
+first beaver generation time only: 535.333617ms, average: 537.836918ms
+5 batches prepared, average time 2.117099501s
+
+2 servers, 200000 msgs per batch, 32 byte messages
+preprocessing data prepared in 4.707187521s
+first beaver generation time only: 1.045064221s, average: 1.063002591s
+5 batches prepared, average time 4.774024989s
+
+2 servers, 500000 msgs per batch, 32 byte messages
+preprocessing data prepared in 11.701485558s
+first beaver generation time only: 2.612147978s, average: 2.574594935s
+5 batches prepared, average time 11.790852245s
+
+2 servers, 1000000 msgs per batch, 32 byte messages
+preprocessing data prepared in 23.52838797s
+first beaver generation time only: 5.314702024s, average: 5.337134676s
+5 batches prepared, average time 23.141634868s
+
+2 servers, 1000 msgs per batch, 160 byte messages
+preprocessing data prepared in 116.359466ms
+first beaver generation time only: 33.429523ms, average: 30.609329ms
+5 batches prepared, average time 111.537294ms
+
+2 servers, 5000 msgs per batch, 160 byte messages
+preprocessing data prepared in 543.141351ms
+first beaver generation time only: 147.690652ms, average: 146.0072ms
+5 batches prepared, average time 529.100097ms
+
+2 servers, 10000 msgs per batch, 160 byte messages
+preprocessing data prepared in 1.04050763s
+first beaver generation time only: 277.657712ms, average: 285.217593ms
+5 batches prepared, average time 1.030054692s
+
+2 servers, 20000 msgs per batch, 160 byte messages
+preprocessing data prepared in 1.964643272s
+first beaver generation time only: 547.12166ms, average: 547.153113ms
+5 batches prepared, average time 1.966133618s
+
+2 servers, 50000 msgs per batch, 160 byte messages
+preprocessing data prepared in 5.450219456s
+first beaver generation time only: 1.310490798s, average: 1.326239143s
+5 batches prepared, average time 5.548986854s
+
+2 servers, 80000 msgs per batch, 160 byte messages
+preprocessing data prepared in 8.613030034s
+first beaver generation time only: 2.14596848s, average: 2.104071889s
+5 batches prepared, average time 8.525019534s
+
+2 servers, 100000 msgs per batch, 160 byte messages
+preprocessing data prepared in 10.56109841s
+first beaver generation time only: 2.591064403s, average: 2.658424249s
+5 batches prepared, average time 10.594463638s
+
+2 servers, 200000 msgs per batch, 160 byte messages
+preprocessing data prepared in 20.754516877s
+first beaver generation time only: 5.356584864s, average: 5.248993378s
+5 batches prepared, average time 20.640067635s
+
+2 servers, 500000 msgs per batch, 160 byte messages
+preprocessing data prepared in 51.264634627s
+first beaver generation time only: 13.198774651s, average: 12.967258694s
+5 batches prepared, average time 51.372955497s
+
+2 servers, 1000000 msgs per batch, 160 byte messages
+preprocessing data prepared in 1m43.328673581s
+first beaver generation time only: 26.917900583s, average: 26.297440391s
+5 batches prepared, average time 1m43.087646619s
+
+2 servers, 1000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 43.636465ms
+first beaver generation time only: 3.151505ms, average: 3.725758ms
+5 batches prepared, average time 41.994651ms
+
+2 servers, 5000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 181.905803ms
+first beaver generation time only: 17.2628ms, average: 16.763185ms
+5 batches prepared, average time 175.178738ms
+
+2 servers, 10000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 329.276926ms
+first beaver generation time only: 32.720195ms, average: 31.471994ms
+5 batches prepared, average time 326.589108ms
+
+2 servers, 20000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 626.143915ms
+first beaver generation time only: 60.356063ms, average: 61.065055ms
+5 batches prepared, average time 633.66752ms
+
+2 servers, 50000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 1.754132276s
+first beaver generation time only: 147.73182ms, average: 146.642546ms
+5 batches prepared, average time 1.802600441s
+
+2 servers, 80000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 2.750787959s
+first beaver generation time only: 222.755259ms, average: 226.21761ms
+5 batches prepared, average time 2.802944649s
+
+2 servers, 100000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 3.494521772s
+first beaver generation time only: 293.151378ms, average: 280.81017ms
+5 batches prepared, average time 3.47537196s
+
+2 servers, 200000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 6.668334374s
+first beaver generation time only: 576.01552ms, average: 552.860076ms
+5 batches prepared, average time 6.5000447s
+
+2 servers, 500000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 16.351275855s
+first beaver generation time only: 1.343570373s, average: 1.321562923s
+5 batches prepared, average time 16.355217993s
+
+2 servers, 1000000 msgs per batch, 160 byte messages
+Messaging mode
+preprocessing data prepared in 32.586805679s
+first beaver generation time only: 2.540614744s, average: 2.579745235s
+5 batches prepared, average time 32.271125872s
+
+2 servers, 1000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 161.700945ms
+first beaver generation time only: 4.47973ms, average: 3.979425ms
+5 batches prepared, average time 164.03851ms
+
+2 servers, 5000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 1.034018827s
+first beaver generation time only: 15.60426ms, average: 16.194737ms
+5 batches prepared, average time 1.058991217s
+
+2 servers, 10000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 1.893085507s
+first beaver generation time only: 28.610971ms, average: 31.361362ms
+5 batches prepared, average time 1.929676921s
+
+2 servers, 20000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 3.426495735s
+first beaver generation time only: 60.110365ms, average: 61.848471ms
+5 batches prepared, average time 3.48052548s
+
+2 servers, 50000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 8.128376815s
+first beaver generation time only: 149.745406ms, average: 150.248956ms
+5 batches prepared, average time 8.161970018s
+
+2 servers, 80000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 12.955610346s
+first beaver generation time only: 223.496619ms, average: 228.377263ms
+5 batches prepared, average time 12.956976094s
+
+2 servers, 100000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 16.003546169s
+first beaver generation time only: 284.334263ms, average: 290.708805ms
+5 batches prepared, average time 15.991024438s
+
+2 servers, 200000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 31.732582182s
+first beaver generation time only: 541.835457ms, average: 550.064618ms
+5 batches prepared, average time 31.603976899s
+
+2 servers, 500000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 1m18.949430357s
+first beaver generation time only: 1.270786427s, average: 1.313943963s
+5 batches prepared, average time 1m19.561430719s
+
+2 servers, 1000000 msgs per batch, 1024 byte messages
+Messaging mode
+preprocessing data prepared in 2m39.543971388s
+first beaver generation time only: 2.67762525s, average: 2.751184803s
+5 batches prepared, average time 2m39.829041606s
+

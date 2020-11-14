@@ -1,0 +1,50 @@
+4 servers, 1000 msgs per batch, 160 byte messages
+preprocessing data prepared in 107.962816ms
+first beaver generation time only: 31.236747ms, average: 31.068005ms
+5 batches prepared, average time 131.930155ms
+
+4 servers, 5000 msgs per batch, 160 byte messages
+preprocessing data prepared in 447.228388ms
+first beaver generation time only: 142.438888ms, average: 143.201282ms
+5 batches prepared, average time 464.076ms
+
+4 servers, 10000 msgs per batch, 160 byte messages
+preprocessing data prepared in 865.129131ms
+first beaver generation time only: 283.370278ms, average: 281.004097ms
+5 batches prepared, average time 869.81741ms
+
+4 servers, 20000 msgs per batch, 160 byte messages
+preprocessing data prepared in 1.664560642s
+first beaver generation time only: 530.454389ms, average: 530.034275ms
+5 batches prepared, average time 1.666694192s
+
+4 servers, 50000 msgs per batch, 160 byte messages
+preprocessing data prepared in 4.501263692s
+first beaver generation time only: 1.280983178s, average: 1.28405088s
+5 batches prepared, average time 4.515674223s
+
+4 servers, 80000 msgs per batch, 160 byte messages
+preprocessing data prepared in 6.906388359s
+first beaver generation time only: 2.013834303s, average: 2.015989216s
+5 batches prepared, average time 6.923726288s
+
+4 servers, 100000 msgs per batch, 160 byte messages
+preprocessing data prepared in 8.510422809s
+first beaver generation time only: 2.453782029s, average: 2.513053103s
+5 batches prepared, average time 8.543255912s
+
+4 servers, 200000 msgs per batch, 160 byte messages
+preprocessing data prepared in 16.339919016s
+first beaver generation time only: 4.952533296s, average: 4.9424697s
+5 batches prepared, average time 16.46851886s
+
+4 servers, 500000 msgs per batch, 160 byte messages
+preprocessing data prepared in 40.175690479s
+first beaver generation time only: 12.224214849s, average: 12.249972265s
+5 batches prepared, average time 40.226830518s
+
+4 servers, 1000000 msgs per batch, 160 byte messages
+preprocessing data prepared in 1m19.894895177s
+first beaver generation time only: 24.315151356s, average: 24.365713144s
+5 batches prepared, average time 1m19.888382816s
+

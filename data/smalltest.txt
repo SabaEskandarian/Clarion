@@ -1,0 +1,380 @@
+Client average compute time: 219.106µs
+
+2 servers, 1000 msgs per batch, 32 byte messages
+blind mac time: 118.640001ms, average: 148.10771msshuffle time: 11.307095ms, average: 17.407951msreveal time: 72.261727ms, average: 72.77634ms
+batches completed: 5
+Time for this batch: 291.146923ms
+Average time per batch: 331.036571ms
+
+
+Client average compute time: 202.461µs
+
+2 servers, 5000 msgs per batch, 32 byte messages
+blind mac time: 263.664227ms, average: 284.419534msshuffle time: 48.9355ms, average: 52.84522msreveal time: 92.701454ms, average: 93.196406ms
+batches completed: 5
+Time for this batch: 558.741505ms
+Average time per batch: 588.764241ms
+
+
+Client average compute time: 179.591µs
+
+2 servers, 10000 msgs per batch, 32 byte messages
+blind mac time: 428.123346ms, average: 445.649998msshuffle time: 109.503569ms, average: 100.809005msreveal time: 124.092122ms, average: 124.274701ms
+batches completed: 5
+Time for this batch: 931.333867ms
+Average time per batch: 941.391549ms
+
+
+Client average compute time: 173.52µs
+
+2 servers, 20000 msgs per batch, 32 byte messages
+blind mac time: 661.640982ms, average: 663.972866msshuffle time: 182.116364ms, average: 182.239029msreveal time: 204.928536ms, average: 207.110601ms
+batches completed: 5
+Time for this batch: 1.479618125s
+Average time per batch: 1.488158597s
+
+
+Client average compute time: 386.576µs
+
+2 servers, 50000 msgs per batch, 32 byte messages
+blind mac time: 1.063277212s, average: 1.06635558sshuffle time: 391.722582ms, average: 398.27996msreveal time: 435.997881ms, average: 454.888739ms
+batches completed: 5
+Time for this batch: 2.878189901s
+Average time per batch: 2.912190426s
+
+
+Client average compute time: 166.966µs
+
+2 servers, 80000 msgs per batch, 32 byte messages
+blind mac time: 1.412650151s, average: 1.431137152sshuffle time: 787.709232ms, average: 797.959847msreveal time: 603.68221ms, average: 615.804753ms
+batches completed: 5
+Time for this batch: 4.204706398s
+Average time per batch: 4.285997911s
+
+
+Client average compute time: 183.637µs
+
+2 servers, 100000 msgs per batch, 32 byte messages
+blind mac time: 1.525793415s, average: 1.550253628sshuffle time: 932.803375ms, average: 972.515618msreveal time: 650.782479ms, average: 696.906054ms
+batches completed: 5
+Time for this batch: 4.817797051s
+Average time per batch: 4.966718978s
+
+
+Client average compute time: 194.696µs
+
+2 servers, 200000 msgs per batch, 32 byte messages
+blind mac time: 2.532144191s, average: 2.611566854sshuffle time: 1.844558128s, average: 1.848853354sreveal time: 1.260343509s, average: 1.244128901s
+batches completed: 5
+Time for this batch: 9.109914819s
+Average time per batch: 9.18823419s
+
+
+Client average compute time: 861.289µs
+
+2 servers, 500000 msgs per batch, 32 byte messages
+blind mac time: 5.508318409s, average: 5.606203062sshuffle time: 4.611645178s, average: 4.659013959sreveal time: 3.059832881s, average: 3.059575906s
+batches completed: 5
+Time for this batch: 21.098243446s
+Average time per batch: 21.303688352s
+
+
+Client average compute time: 175.82µs
+
+2 servers, 1000000 msgs per batch, 32 byte messages
+blind mac time: 10.534918462s, average: 10.356617743sshuffle time: 9.29525312s, average: 9.195303479sreveal time: 6.228221954s, average: 6.106259777s
+batches completed: 5
+Time for this batch: 41.355249758s
+Average time per batch: 41.162772644s
+
+
+Client average compute time: 260.075µs
+
+2 servers, 1000 msgs per batch, 160 byte messages
+blind mac time: 220.925066ms, average: 255.857978msshuffle time: 45.1486ms, average: 49.917083msreveal time: 97.457118ms, average: 97.908845ms
+batches completed: 5
+Time for this batch: 509.774522ms
+Average time per batch: 556.634764ms
+
+
+Client average compute time: 189.153µs
+
+2 servers, 5000 msgs per batch, 160 byte messages
+blind mac time: 623.210277ms, average: 628.838487msshuffle time: 197.391577ms, average: 198.925246msreveal time: 209.531662ms, average: 208.227813ms
+batches completed: 5
+Time for this batch: 1.460251955s
+Average time per batch: 1.455689398s
+
+
+Client average compute time: 474.889µs
+
+2 servers, 10000 msgs per batch, 160 byte messages
+blind mac time: 927.364067ms, average: 924.413115msshuffle time: 349.061258ms, average: 351.360326msreveal time: 354.071261ms, average: 357.188379ms
+batches completed: 5
+Time for this batch: 2.401239009s
+Average time per batch: 2.420374613s
+
+
+Client average compute time: 302.961µs
+
+2 servers, 20000 msgs per batch, 160 byte messages
+blind mac time: 1.409262496s, average: 1.398209555sshuffle time: 927.426855ms, average: 912.648701msreveal time: 635.896589ms, average: 642.447684ms
+batches completed: 5
+Time for this batch: 4.277645966s
+Average time per batch: 4.271299069s
+
+
+Client average compute time: 201.547µs
+
+2 servers, 50000 msgs per batch, 160 byte messages
+blind mac time: 2.843961783s, average: 2.894944692sshuffle time: 2.050315206s, average: 2.021151557sreveal time: 1.356065821s, average: 1.354168508s
+batches completed: 5
+Time for this batch: 9.623503851s
+Average time per batch: 9.6440177s
+
+
+Client average compute time: 199.152µs
+
+2 servers, 80000 msgs per batch, 160 byte messages
+blind mac time: 4.3696144s, average: 4.295982394sshuffle time: 3.532383316s, average: 3.058966226sreveal time: 2.046186022s, average: 2.058234313s
+batches completed: 5
+Time for this batch: 15.381300478s
+Average time per batch: 14.705907193s
+
+
+Client average compute time: 270.479µs
+
+2 servers, 100000 msgs per batch, 160 byte messages
+blind mac time: 5.297230887s, average: 5.212000312sshuffle time: 3.780941198s, average: 3.747123819sreveal time: 2.571127839s, average: 2.580814081s
+batches completed: 5
+Time for this batch: 17.985609584s
+Average time per batch: 17.912962821s
+
+
+Client average compute time: 200.515µs
+
+2 servers, 200000 msgs per batch, 160 byte messages
+blind mac time: 9.564531974s, average: 9.613067723sshuffle time: 7.323324754s, average: 7.348317738sreveal time: 5.008789403s, average: 4.967218509s
+batches completed: 5
+Time for this batch: 34.151719359s
+Average time per batch: 33.933077704s
+
+
+Client average compute time: 270.053µs
+
+2 servers, 500000 msgs per batch, 160 byte messages
+blind mac time: 23.092779323s, average: 22.602430315sshuffle time: 18.381534953s, average: 18.355117776sreveal time: 12.018480178s, average: 12.095234283s
+batches completed: 5
+Time for this batch: 1m22.996053939s
+Average time per batch: 1m22.472949834s
+
+
+Client average compute time: 219.47µs
+
+2 servers, 1000000 msgs per batch, 160 byte messages
+blind mac time: 45.631974831s, average: 45.032537011sshuffle time: 35.886907746s, average: 35.856715023sreveal time: 25.440015809s, average: 25.133730293s
+batches completed: 5
+Time for this batch: 2m43.820370552s
+Average time per batch: 2m42.69039875s
+
+
+Client average compute time: 231.752µs
+
+2 servers, 1000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 115.786171ms, average: 151.650982msshuffle time: 26.583434ms, average: 41.452202msreveal time: 90.279602ms, average: 91.380936ms
+batches completed: 5
+Time for this batch: 320.659734ms
+Average time per batch: 387.154486ms
+
+
+Client average compute time: 145.369µs
+
+2 servers, 5000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 267.441251ms, average: 276.909621msshuffle time: 147.34925ms, average: 148.944411msreveal time: 141.420172ms, average: 140.430858ms
+batches completed: 5
+Time for this batch: 747.478415ms
+Average time per batch: 755.260972ms
+
+
+Client average compute time: 137.696µs
+
+2 servers, 10000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 355.879138ms, average: 370.716878msshuffle time: 262.286522ms, average: 260.018951msreveal time: 230.600917ms, average: 234.471417ms
+batches completed: 5
+Time for this batch: 1.15394197s
+Average time per batch: 1.164895409s
+
+
+Client average compute time: 134.722µs
+
+2 servers, 20000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 560.532309ms, average: 541.821097msshuffle time: 440.868533ms, average: 438.58976msreveal time: 379.829438ms, average: 367.203203ms
+batches completed: 5
+Time for this batch: 1.828581774s
+Average time per batch: 1.79729587s
+
+
+Client average compute time: 223.34µs
+
+2 servers, 50000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 743.921757ms, average: 756.065821msshuffle time: 1.196267623s, average: 1.207498663sreveal time: 762.606417ms, average: 780.904154ms
+batches completed: 5
+Time for this batch: 3.430786633s
+Average time per batch: 3.476211902s
+
+
+Client average compute time: 145.009µs
+
+2 servers, 80000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 961.430624ms, average: 970.807819msshuffle time: 1.864997969s, average: 1.857121009sreveal time: 1.1783631s, average: 1.197386877s
+batches completed: 5
+Time for this batch: 5.240132597s
+Average time per batch: 5.226006718s
+
+
+Client average compute time: 160.984µs
+
+2 servers, 100000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 1.053944765s, average: 1.063381954sshuffle time: 2.280329163s, average: 2.310598373sreveal time: 1.448082989s, average: 1.450911763s
+batches completed: 5
+Time for this batch: 6.353257557s
+Average time per batch: 6.341672572s
+
+
+Client average compute time: 240.125µs
+
+2 servers, 200000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 1.669526836s, average: 1.64198698sshuffle time: 4.324643807s, average: 4.351316014sreveal time: 2.873856864s, average: 2.864407156s
+batches completed: 5
+Time for this batch: 12.186831225s
+Average time per batch: 12.210333329s
+
+
+Client average compute time: 135.929µs
+
+2 servers, 500000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 3.527484925s, average: 3.546568853sshuffle time: 10.680810706s, average: 10.666784215sreveal time: 7.180960102s, average: 7.19601948s
+batches completed: 5
+Time for this batch: 29.339591916s
+Average time per batch: 29.329514602s
+
+
+Client average compute time: 196.745µs
+
+2 servers, 1000000 msgs per batch, 160 byte messages
+Messaging mode
+blind mac time: 6.56058714s, average: 6.300042249sshuffle time: 21.543465621s, average: 21.389652107sreveal time: 14.120815463s, average: 14.27751873s
+batches completed: 5
+Time for this batch: 57.615010448s
+Average time per batch: 57.593967186s
+
+
+Client average compute time: 202.181µs
+
+2 servers, 1000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 186.924482ms, average: 190.085505msshuffle time: 137.598431ms, average: 165.068194msreveal time: 154.544878ms, average: 162.51207ms
+batches completed: 5
+Time for this batch: 617.296242ms
+Average time per batch: 688.983045ms
+
+
+Client average compute time: 203.357µs
+
+2 servers, 5000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 263.647474ms, average: 281.992418msshuffle time: 816.592424ms, average: 827.395512msreveal time: 548.12011ms, average: 545.254571ms
+batches completed: 5
+Time for this batch: 1.92892604s
+Average time per batch: 1.964240117s
+
+
+Client average compute time: 174.557µs
+
+2 servers, 10000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 422.075747ms, average: 434.718336msshuffle time: 1.513842635s, average: 1.509347501sreveal time: 906.033862ms, average: 929.029513ms
+batches completed: 5
+Time for this batch: 3.357911024s
+Average time per batch: 3.387491368s
+
+
+Client average compute time: 225.004µs
+
+2 servers, 20000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 530.084755ms, average: 562.686064msshuffle time: 2.603997916s, average: 2.631659998sreveal time: 1.71504687s, average: 1.719400909s
+batches completed: 5
+Time for this batch: 6.122902785s
+Average time per batch: 6.195854341s
+
+
+Client average compute time: 336.56µs
+
+2 servers, 50000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 749.868557ms, average: 771.666939msshuffle time: 6.046816889s, average: 6.015003924sreveal time: 3.949934s, average: 3.984416467s
+batches completed: 5
+Time for this batch: 14.240132222s
+Average time per batch: 14.331394027s
+
+
+Client average compute time: 176.617µs
+
+2 servers, 80000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 1.035296723s, average: 1.069523687sshuffle time: 9.407426854s, average: 9.427482719sreveal time: 6.021173718s, average: 6.196112785s
+batches completed: 5
+Time for this batch: 22.143410801s
+Average time per batch: 22.330370554s
+
+
+Client average compute time: 182.037µs
+
+2 servers, 100000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 1.25199283s, average: 1.175242718sshuffle time: 11.571165531s, average: 11.629417545sreveal time: 7.532581945s, average: 7.756922411s
+batches completed: 5
+Time for this batch: 27.305646047s
+Average time per batch: 27.560673727s
+
+
+Client average compute time: 188.746µs
+
+2 servers, 200000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 1.796966189s, average: 1.858376357sshuffle time: 22.999347508s, average: 22.847664681sreveal time: 15.064065301s, average: 15.276990641s
+batches completed: 5
+Time for this batch: 54.374074773s
+Average time per batch: 54.374025026s
+
+
+Client average compute time: 182.262µs
+
+2 servers, 500000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 4.279873031s, average: 4.192329196sshuffle time: 55.576047648s, average: 56.283663602sreveal time: 36.605674357s, average: 37.506488921s
+batches completed: 5
+Time for this batch: 2m12.867285635s
+Average time per batch: 2m14.872841524s
+
+
+Client average compute time: 176.555µs
+
+2 servers, 1000000 msgs per batch, 1024 byte messages
+Messaging mode
+blind mac time: 7.896072298s, average: 7.940893396sshuffle time: 1m54.788766375s, average: 1m53.600868115sreveal time: 1m19.742749192s, average: 1m19.279559831s
+batches completed: 5
+Time for this batch: 4m35.569904377s
+Average time per batch: 4m34.341791039s
+
+
