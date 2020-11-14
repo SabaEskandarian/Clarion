@@ -873,8 +873,8 @@ func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, 
         keyBlocks = 1
     }
     
-    maskedExpandedKeyShares := make([]byte, 16*batchSize*msgBlocks)
-    maskedMsgShares := make([]byte, 16*batchSize*msgBlocks)
+    maskedExpandedKeyShares := make([]byte, 16*batchSize*keyBlocks)
+    maskedMsgShares := make([]byte, 16*batchSize*keyBlocks)
         
     numThreads, chunkSize := PickNumThreads(batchSize)
     blocker := make(chan int)
