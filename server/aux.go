@@ -92,6 +92,7 @@ func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string
         var beaverTotalTime time.Duration
         blocker := make(chan int)
         deltaBlocker := make(chan int)
+        beaverBlocker := make(chan int)
         seeds := make([][]byte, numServers)
         
         for testCount:=0; testCount < 5; testCount++{
@@ -133,12 +134,12 @@ func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string
             //get the last delta
             delta := mycrypto.GenShareTrans(batchSize, blocksPerRow, seeds)
             
-            //consume the delta blocker
-            <- deltaBlocker
             //send the last server delta
             go func(){
+                //consume the delta blocker
+                <- deltaBlocker
                 writeToConn(conns[numServers - 1], delta)
-                deltaBlocker <- 1
+                beaverBlocker <- 1
             }()
             
             //second round of beaver triples
@@ -148,7 +149,7 @@ func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string
             for i:=0; i < numServers; i++ {
                 <- blocker
             }
-            <- deltaBlocker
+            <- beaverBlocker
             
             //send beaver stuff
             for i:=0; i < numServers; i++ {
