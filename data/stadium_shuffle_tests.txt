@@ -49,7 +49,7 @@ shuffle begins!
 shuffle is done! In 2
 proof is done! In 4
 verification is done! In 2
-Shuffle + prove + verify = 8
+Shuffle + prove + verify = 
 everything passed!
 stress test is done in 8 seconds
 
@@ -104,3 +104,114 @@ verification is done! In 31
 Shuffle + prove + verify = 116
 everything passed!
 stress test is done in 126 seconds
+
+-----------------------------------------
+Testing on a 8vcpu, 48gb instance
+us-east4-c
+
+This is used to do the mixnet comparison for the k server scheme
+
+waiting for everyone...
+shuffling 10048 messages
+ecryption time: 0
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 1
+proof is done! In 0
+verification is done! In 1
+Shuffle + prove + verify = 2
+everything passed!
+stress test is done in 2 seconds
+
+waiting for everyone...
+shuffling 20032 messages
+ecryption time: 1
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 0
+proof is done! In 2
+verification is done! In 0
+Shuffle + prove + verify = 2
+everything passed!
+stress test is done in 3 seconds
+
+waiting for everyone...
+shuffling 50048 messages
+ecryption time: 1
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 2
+proof is done! In 3
+verification is done! In 2
+Shuffle + prove + verify = 7
+everything passed!
+stress test is done in 8 seconds
+
+waiting for everyone...
+shuffling 80000 messages
+ecryption time: 2
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 2
+proof is done! In 5
+verification is done! In 3
+Shuffle + prove + verify = 10
+everything passed!
+stress test is done in 12 seconds
+
+waiting for everyone...
+shuffling 100032 messages
+ecryption time: 2
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 3
+proof is done! In 6
+verification is done! In 4
+Shuffle + prove + verify = 13
+everything passed!
+stress test is done in 15 seconds
+
+waiting for everyone...
+shuffling 200000 messages
+ecryption time: 4
+parsing input
+done parsing. 0
+shuffle begins!
+shuffle is done! In 6
+proof is done! In 14
+verification is done! In 7
+Shuffle + prove + verify = 27
+everything passed!
+stress test is done in 31 seconds
+
+waiting for everyone...
+shuffling 500032 messages
+ecryption time: 9
+parsing input
+done parsing. 1
+shuffle begins!
+shuffle is done! In 14
+proof is done! In 43
+verification is done! In 18
+Shuffle + prove + verify = 75
+everything passed!
+stress test is done in 85 seconds
+
+waiting for everyone...
+shuffling 1000000 messages
+ecryption time: 17
+parsing input
+done parsing. 3
+shuffle begins!
+shuffle is done! In 27
+proof is done! In 89
+verification is done! In 35
+Shuffle + prove + verify = 151
+everything passed!
+stress test is done in 171 seconds
+
