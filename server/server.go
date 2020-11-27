@@ -432,13 +432,13 @@ func main() {
                 <- beaverCBlocker
             }
             
-            //everyone distributes (computed mac - provided tag) shares
-            macDiffShares := mycrypto.BeaverProduct(msgBlocks, batchSize, beaversC, mergedMaskedShares, db, leader, messagingMode)
+            //everyone computes (computed mac - provided tag) shares
+            macDiffShares := mycrypto.BeaverProduct(msgBlocks, batchSize, beaversC, mergedMaskedShares, db, leader, messagingMode, false)
             
-            //broadcast shares and verify everything sums to 0
+            //broadcast shares
             finalMacDiffShares := broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)
             
-            //verify the macs come out to 0
+            //verify the mac differences come out to 0
             success := mycrypto.CheckSharesAreZero(batchSize, numServers, finalMacDiffShares)
             if !success {
                 panic("blind mac verification failed")
@@ -553,14 +553,23 @@ func main() {
                 <- beaverCBlockerTwo
             }
             
-            //everyone distributes (computed mac - provided tag) shares
-            macDiffShares = mycrypto.BeaverProduct(msgBlocks, batchSize, beaversCTwo, mergedMaskedShares, db, leader, messagingMode)
+            //everyone computes (computed mac - provided tag) shares
+            macDiffShares = mycrypto.BeaverProduct(msgBlocks, batchSize, beaversCTwo, mergedMaskedShares, db, leader, messagingMode, true)
+                        
+            //hash macDiffShares and distribute as a commitment. 
+            hashedMacDiffShares := mycrypto.Hash(macDiffShares)
+            allHashedMacDiffShares := broadcastAndReceiveFromAll(hashedMacDiffShares, conns, serverNum)
             
-            //broadcast shares and verify everything sums to 0
+            //broadcast shares
             finalMacDiffShares = broadcastAndReceiveFromAll(macDiffShares, conns, serverNum)
             
+            //check that the broadcasted shares match the commitment
+            if !mycrypto.CheckHashes(allHashedMacDiffShares, finalMacDiffShares, len(macDiffShares), serverNum) {
+                panic("mac hashes did not match")
+            }
+            
             //verify the macs come out to 0
-            success = mycrypto.CheckSharesAreZero(batchSize, numServers, finalMacDiffShares)
+            success = mycrypto.CheckSharesAreZero(numThreads, numServers, finalMacDiffShares)
             if !success {
                 panic("blind mac verification two failed")
             }

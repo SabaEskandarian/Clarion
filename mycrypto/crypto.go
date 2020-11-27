@@ -805,7 +805,7 @@ func TestCheckSharesAreZero() bool {
     return CheckSharesAreZero(batchSize, numServers, flatShares)
 }
 
-func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte,  db [][]byte, leader, messagingMode bool) []byte {
+func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte,  db [][]byte, leader, messagingMode, aggregate bool) []byte {
 
     keyBlocks := msgBlocks
     if messagingMode {
@@ -813,14 +813,20 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
     }
     
     //locally compute product shares and share of mac, subtract from share of given tag
-    macDiffShares := make([]byte, 16*batchSize)
+    macDiffShares := make([]byte, 0)
     blocker := make(chan int)
     numThreads, chunkSize := PickNumThreads(batchSize)
+    if aggregate {
+        macDiffShares = make([]byte, 16*numThreads)
+    } else {
+        macDiffShares = make([]byte, 16*batchSize)
+    }
     
     for t:=0; t < numThreads; t++ {
         startIndex := t*chunkSize
         endIndex := (t+1)*chunkSize
-        go func(start, end int) {
+        go func(start, end, threadIndex int) {
+            var aggregateRunningSum modp.Element
             for i:=start; i < end; i++ {
                 var maskedKey, myKeyShare, maskedMsg, myMsgShare, givenTag, temp modp.Element
                 var runningSum, beaverProductShare modp.Element
@@ -851,11 +857,18 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
                 }
                 givenTag.SetBytes(db[i][msgBlocks*16:msgBlocks*16 + 16])
                 runningSum.Sub(&runningSum, &givenTag)
-                        
-                copy(macDiffShares[16*i:16*(i+1)], runningSum.Bytes())
+                
+                if aggregate {
+                    aggregateRunningSum.Add(&aggregateRunningSum, &runningSum)
+                } else {
+                    copy(macDiffShares[16*i:16*(i+1)], runningSum.Bytes())
+                }
+            }
+            if aggregate {
+                copy(macDiffShares[16*threadIndex:16*(threadIndex+1)], aggregateRunningSum.Bytes())
             }
             blocker <- 1
-        }(startIndex, endIndex)
+        }(startIndex, endIndex, t)
     }
     
     for i:=0; i < numThreads; i++ {

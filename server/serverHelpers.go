@@ -277,7 +277,7 @@ func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) 
     return outputDB, success
 }
 
-func broadcastAndReceiveFromAll(msg []byte, conns []net.Conn, myNum int) []byte {    
+func broadcastAndReceiveFromAll(msg []byte, conns []net.Conn, myNum int) []byte {
     blocker := make(chan int)
     numServers := len(conns)
     contentLenPerServer := len(msg)
