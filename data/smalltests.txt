@@ -1,0 +1,71 @@
+Data for evaluation
+
+instances have 2vcpus, 48gb of memory
+
+1 out of 3 system
+Server 0: us-east1-b
+Server 1: us-central1-a
+Server -1: us-west2-a
+
+message sizes to evaluate: 32 byte, 160 byte, 1kb
+batch sizes 1k, 5k, 10k, 20k, 50k, 80k, 100k, 200k, 500k, 1m
+
+32B is tested in normal mode
+160B is tested in both normal and messaging modes
+1KB is tested only in messaging mode
+
+
+32 byte messages
+normal mode
+(batchSize, time in sec)
+(1000,.354)
+(5000,.635)
+(10000,.939)
+(20000,1.37)
+(50000,2.79)
+(80000,4.04)
+(100000,4.57)
+(200000,8.70)
+(500000,20.46)
+(1000000,39.49)
+
+160 byte messages
+normal mode
+(1000,.580)
+(5000,1.46)
+(10000,2.33)
+(20000,4.12)
+(50000,9.43)
+(80000,14.09)
+(100000,17.21)
+(200000,33.18)
+(500000,81.69)
+(1000000,162.36)
+
+160 byte messages
+messaging mode
+(1000,.411)
+(5000,.779)
+(10000,1.18)
+(20000,1.81)
+(50000,3.52)
+(80000,5.31)
+(100000,6.22)
+(200000,11.80)
+(500000,28.51)
+(1000000,55.73)
+
+
+1kb messages
+messaging mode
+(1000,.688)
+(5000,1.88)
+(10000,3.36)
+(20000,6.12)
+(50000,14.16)
+(80000,22.04)
+(100000,27.14)
+(200000,53.65)
+(500000,206.59) //Outlier may have skewed this high...
+(1000000,269.25)
+

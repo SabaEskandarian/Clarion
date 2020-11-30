@@ -1,0 +1,25 @@
+Data for evaluation
+
+instances have 8vcpus, 64gb of memory
+
+k server system with k=5
+Server 0: us-east1-b
+Server 1: us-central1-a
+Server 2: us-west2-b
+Server 3: us-central1-c
+Server 4: us-east4-c
+Server -1: us-west2-a
+
+message sizes to evaluate: 160 byte (normal mode)
+batch sizes 1k, 5k, 10k, 20k, 50k, 80k, 100k, 200k, 500k, 1m
+
+(1000,1.09)
+(5000,2.89)
+(10000,4.31)
+(20000,6.74)
+(50000,13.83)
+(80000,21.63)
+(100000,25.28)
+(200000,45.20)
+(500000,104.27)
+(1000000,189.44)
