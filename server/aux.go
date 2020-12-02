@@ -80,10 +80,10 @@ func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string
         }
         
      
-        blocksPerRow :=  2*msgBlocks + 1
-        numBeavers := batchSize * msgBlocks
+        blocksPerRow :=  2*(msgBlocks+1) + 1
+        numBeavers := batchSize * (msgBlocks+1)
         if messagingMode {
-            blocksPerRow = msgBlocks + 2
+            blocksPerRow = msgBlocks + 3
             numBeavers = batchSize
         }
         
@@ -143,7 +143,7 @@ func aux (numServers int, msgBlocksParams, batchSizeParams []int, addrs []string
             }()
             
             //second round of beaver triples
-            beaversTwo := mycrypto.GenBeavers(numBeavers, 96, seeds)
+            beaversTwo := mycrypto.GenBeavers(batchSize, 96, seeds)
             
             //make sure the previous messages are all sent
             for i:=0; i < numServers; i++ {

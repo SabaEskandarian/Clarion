@@ -160,10 +160,9 @@ func ComputeMac(msg []byte, keys []byte, messagingMode bool) []byte {
 }
 
 //check mac in the clear
-//won't work if messagingMode == true in the calling code
-func CheckMac(msg, tag []byte, keys []byte) bool {
+func CheckMac(msg, tag []byte, keys []byte, messagingMode bool) bool {
  
-    return bytes.Equal(ComputeMac(msg, keys, false), tag)
+    return bytes.Equal(ComputeMac(msg, keys, messagingMode), tag)
 }
 
 //expand a seed using aes in CTR mode
@@ -805,10 +804,10 @@ func TestCheckSharesAreZero() bool {
     return CheckSharesAreZero(batchSize, numServers, flatShares)
 }
 
-func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte,  db [][]byte, leader, messagingMode, aggregate bool) []byte {
+func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte,  db [][]byte, leader, messagingMode, aggregate, partTwo bool) []byte {
 
     keyBlocks := msgBlocks
-    if messagingMode {
+    if messagingMode || partTwo {
         keyBlocks = 1
     }
     
@@ -837,6 +836,9 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
                     myMsgShare.SetBytes(db[i][16*j:16*(j+1)])
                     keyIndex := i*16*keyBlocks + 16*j
                     msgIndex := len(mergedMaskedShares)/2 + keyIndex
+                    if partTwo && !messagingMode {
+                        msgIndex = 16*batchSize + i*16*msgBlocks + 16*j
+                    }
                     maskedKey.SetBytes(mergedMaskedShares[keyIndex:keyIndex+16])
                     maskedMsg.SetBytes(mergedMaskedShares[msgIndex:msgIndex+16])
                     
@@ -854,6 +856,19 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
                     beaverProductShare.Add(&beaverProductShare, &temp)
                     
                     runningSum.Add(&runningSum, &beaverProductShare)
+                }
+                
+                //for second time, most of this is done in clear
+                if partTwo && !messagingMode {
+                    var ctElt modp.Element
+                    for j:=1; j < msgBlocks; j++ {
+                        ctIndex := 16*batchSize + 16*i*msgBlocks + j*16
+                        keyShareIndex := 16*(msgBlocks+1) + 16*j
+                        myKeyShare.SetBytes(db[i][keyShareIndex:keyShareIndex+16])
+                        ctElt.SetBytes(mergedMaskedShares[ctIndex:ctIndex+16])
+                        ctElt.Mul(&ctElt, &myKeyShare)
+                        runningSum.Add(&runningSum, &ctElt)
+                    }
                 }
                 givenTag.SetBytes(db[i][msgBlocks*16:msgBlocks*16 + 16])
                 runningSum.Sub(&runningSum, &givenTag)
@@ -879,16 +894,19 @@ func BeaverProduct(msgBlocks, batchSize int, beaversC, mergedMaskedShares []byte
 }
 
 //get all the masked stuff together for the blind mac verification
-func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, db [][]byte, messagingMode bool) []byte {
+func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, db [][]byte, messagingMode, partTwo bool) []byte {
     
     keyBlocks := msgBlocks
     if messagingMode {
         keyBlocks = 1
     }
     
-    maskedExpandedKeyShares := make([]byte, 16*batchSize*keyBlocks)
     maskedMsgShares := make([]byte, 16*batchSize*keyBlocks)
-        
+    if partTwo {
+        keyBlocks = 1
+    }
+    maskedExpandedKeyShares := make([]byte, 16*batchSize*keyBlocks)
+    
     numThreads, chunkSize := PickNumThreads(batchSize)
     blocker := make(chan int)
     
@@ -912,7 +930,16 @@ func GetMaskedStuff(batchSize, msgBlocks, myNum int, beaversA, beaversB []byte, 
                     value.SetBytes(db[i][16*j:16*(j+1)])
                     mask.SetBytes(beaversB[beaverIndex:beaverIndex+16])
                     value.Sub(&value,&mask)
+                    if partTwo && !messagingMode {
+                        index = 16*msgBlocks*i
+                    }
                     copy(maskedMsgShares[index:index+16], value.Bytes())
+                }
+                
+                if partTwo && !messagingMode { //the rest of the masked share is actually the unmasked CT
+                    index :=16*msgBlocks*i+16
+                    copy(maskedMsgShares[index:index+16*(msgBlocks-1)], 
+                         db[i][16:16*msgBlocks])
                 }
             }
             blocker <- 1

@@ -82,7 +82,7 @@ func clientSim(msgType, msgBlocks int, pubKeys []*[32]byte, messagingMode bool) 
         
     //generate the MACed ciphertext, MAC, and all the keys; secret share
     //look in vendors/mycrypto/crypto.go for details
-    msg := mycrypto.MakeMsg(msgBlocks, msgType)
+    msg := mycrypto.MakeCT(msgBlocks-1, msgType)
     mac, keySeeds := mycrypto.WeirdMac(numServers, msg, messagingMode)
     bodyShares := mycrypto.Share(numServers, append(msg, mac...))
         
@@ -243,9 +243,14 @@ func mergeFlattenedDBs(flatDBs []byte, numServers, dbSize int) []byte {
 
 //check all the macs in a merged db
 //and decrypt the messages
-func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) ([][]byte, bool) {
+func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int, messagingMode bool) ([][]byte, bool) {
     outputDB := make([][]byte, batchSize)
     rowLen := msgBlocks*32 + 16
+    
+    if messagingMode {
+        rowLen = msgBlocks*16 + 32
+    }
+    
     success := true
     
     numThreads, chunkSize := mycrypto.PickNumThreads(batchSize)
@@ -261,9 +266,13 @@ func checkMacsAndDecrypt(mergedDB []byte, numServers, msgBlocks, batchSize int) 
                 tag := row[msgBlocks*16:(msgBlocks+1)*16]
                 keys := row[(msgBlocks+1)*16:]
 
-                if !mycrypto.CheckMac(msg, tag, keys) {
+                if !mycrypto.CheckMac(msg, tag, keys, messagingMode) {
                     success = false
                 }
+                
+                //decrypt
+                msg = mycrypto.DecryptCT(msg)
+                
                 outputDB[i] = msg
             }
             blocker <- 1
