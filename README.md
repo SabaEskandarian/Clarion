@@ -1,4 +1,4 @@
-# ShuffleCommunication
+# Clarion
 Metadata-hiding communication from shuffling secret-shared data
 
 
